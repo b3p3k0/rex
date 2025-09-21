@@ -21,6 +21,7 @@ package dev.rex.app.di
 import android.content.Context
 import androidx.room.Room
 import dev.rex.app.data.db.*
+import dev.rex.app.data.repo.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -56,4 +57,25 @@ object DatabaseModule {
 
     @Provides
     fun provideLogsDao(database: RexDatabase): LogsDao = database.logsDao()
+
+    // Repositories
+    @Provides
+    @Singleton
+    fun provideHostsRepository(hostsDao: HostsDao): HostsRepository = 
+        HostsRepository(hostsDao)
+
+    @Provides
+    @Singleton
+    fun provideCommandsRepository(commandsDao: CommandsDao): CommandsRepository = 
+        CommandsRepository(commandsDao)
+
+    @Provides
+    @Singleton
+    fun provideLogsRepository(logsDao: LogsDao): LogsRepository = 
+        LogsRepository(logsDao)
+
+    @Provides
+    @Singleton
+    fun provideKeysRepository(keyBlobsDao: KeyBlobsDao): KeysRepository = 
+        KeysRepository(keyBlobsDao)
 }

@@ -32,7 +32,7 @@ import android.content.Context
         LogEntity::class
     ],
     version = 1,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class RexDatabase : RoomDatabase() {
     abstract fun hostsDao(): HostsDao
