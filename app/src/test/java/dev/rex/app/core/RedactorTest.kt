@@ -39,7 +39,7 @@ class RedactorTest {
 
     @Test
     fun `redacts API key patterns`() {
-        val input = "api_key=sk_live_123456789abcdef"
+        val input = "api_key=sk_test_123456789abcdef"
         val result = Redactor.redact(input)
         assertEquals("[REDACTED]", result)
     }
