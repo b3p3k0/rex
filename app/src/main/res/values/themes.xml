@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Rex" parent="android:Theme.Material.DayNight.NoActionBar" />
+    <!-- App theme using Material3 for Compose -->
+    <style name="Theme.Rex" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Keep status bar icons legible -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
 </resources>

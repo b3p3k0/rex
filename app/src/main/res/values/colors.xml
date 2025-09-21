@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material3 seed color system -->
+    <color name="rex_seed">#6750A4</color>
+    
+    <!-- Core Material3 colors -->
+    <color name="primary">#6750A4</color>
+    <color name="onPrimary">#FFFFFF</color>
+    <color name="background">#FFFBFE</color>
+    <color name="surface">#FFFBFE</color>
+</resources>
