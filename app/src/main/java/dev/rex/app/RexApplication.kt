@@ -1,6 +1,6 @@
 /*
  * Rex — Remote Exec for Android
- * Copyright (C) 2024 Kevin Papa
+ * Copyright (C) 2024 Rex Maintainers (b3p3k0)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,21 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.github.kevinpapaprogrammer.rex.core
+package dev.rex.app
 
-sealed interface ExecStatus {
-    data object Connecting : ExecStatus
-    data object Running : ExecStatus
-    data class Completed(val exitCode: Int) : ExecStatus
-    data class Failed(val reason: ExecError) : ExecStatus
-    data object Cancelled : ExecStatus
-}
+import android.app.Application
+import dagger.hilt.android.HiltAndroidApp
 
-enum class ExecError {
-    DNS,
-    REFUSED,
-    TIMEOUT,
-    HOSTKEY_MISMATCH,
-    AUTH_FAILED,
-    IO
-}
+@HiltAndroidApp
+class RexApplication : Application()

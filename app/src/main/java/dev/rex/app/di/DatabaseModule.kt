@@ -1,6 +1,6 @@
 /*
  * Rex — Remote Exec for Android
- * Copyright (C) 2024 Kevin Papa
+ * Copyright (C) 2024 Rex Maintainers (b3p3k0)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,11 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.github.kevinpapaprogrammer.rex.di
+package dev.rex.app.di
 
 import android.content.Context
 import androidx.room.Room
-import com.github.kevinpapaprogrammer.rex.data.db.*
+import dev.rex.app.data.db.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

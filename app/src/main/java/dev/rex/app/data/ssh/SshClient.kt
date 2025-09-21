@@ -1,6 +1,6 @@
 /*
  * Rex — Remote Exec for Android
- * Copyright (C) 2024 Kevin Papa
+ * Copyright (C) 2024 Rex Maintainers (b3p3k0)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.github.kevinpapaprogrammer.rex.data.ssh
+package dev.rex.app.data.ssh
 
 import kotlinx.coroutines.flow.Flow
 import okio.ByteString

@@ -42,3 +42,4 @@
 # OkIO
 -dontwarn okio.**
 -dontwarn javax.annotation.**
+
