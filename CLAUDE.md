@@ -25,10 +25,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ### Project Requirements
 - **JDK 21** (Ubuntu 24.04 LTS default) - Critical requirement, not JDK 17
 - **Android SDK API 35** with build-tools 35.0.0
+- **Material3 Theme System**: Uses `Theme.Material3.DayNight.NoActionBar` parent theme
+- **Compose Compiler**: Version 1.5.15 compatible with Kotlin 1.9.25
 - Room schema exports are tracked in git at `app/schemas/`
 
-### Version Synchronization
-Keep Room plugin version in `build.gradle.kts` synchronized with room-compiler version in `app/build.gradle.kts` (currently 2.6.1).
+### Version Synchronization & Compatibility
+- Keep Room plugin version in `build.gradle.kts` synchronized with room-compiler version in `app/build.gradle.kts` (currently 2.6.1)
+- **Kotlin ↔ Compose Compiler**: Current pairing is Kotlin 1.9.25 ↔ Compose Compiler 1.5.15
+- **Theme Dependencies**: Both AppCompat 1.7.0 and Material 1.12.0 required alongside Compose BOM 2024.09.01
+- **Material3 Colors**: XML colors.xml must mirror Compose ColorScheme for consistency
 
 ## Architecture Overview
 
@@ -133,3 +138,17 @@ Use ErrorMapper for consistent exception-to-user-message mapping:
 - ConnectException → "Connection refused"  
 - SocketTimeoutException → "Timed out"
 - AuthException → "Authentication failed"
+
+## Quality Assurance
+
+### Automated Checks
+The `rex_dev_setup.sh --launch` script includes quality gates:
+- `./gradlew lint` - Code style and resource validation
+- Build verification before emulator launch
+- CI-ready command sequence for future automation
+
+### Theme Validation
+- All XML theme references use Material3 hierarchy
+- Colors.xml provides Material3 seed color system (#6750A4)
+- AppCompat/Material dependencies ensure proper fallback support
+- Transparent status bar configuration for modern UI
