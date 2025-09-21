@@ -29,10 +29,10 @@ import java.net.UnknownHostException
 object ErrorMapper {
     
     private val errorMappingTable = mapOf(
-        UnknownHostException::class.java to Triple(ExecError.DNS, "Hostname not found."),
-        ConnectException::class.java to Triple(ExecError.REFUSED, "Connection refused."),
-        SocketTimeoutException::class.java to Triple(ExecError.TIMEOUT, "Timed out."),
-        IOException::class.java to Triple(ExecError.IO, "Input/output error.")
+        UnknownHostException::class.java to Pair(ExecError.DNS, "Hostname not found."),
+        ConnectException::class.java to Pair(ExecError.REFUSED, "Connection refused."),
+        SocketTimeoutException::class.java to Pair(ExecError.TIMEOUT, "Timed out."),
+        IOException::class.java to Pair(ExecError.IO, "Input/output error.")
     )
     
     fun mapException(throwable: Throwable): Pair<ExecError, String> {
