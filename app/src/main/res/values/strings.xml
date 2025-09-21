@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rex</string>
+    
+    <!-- Actions -->
+    <string name="action_run">Run</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+    <string name="action_trust_and_pin">Trust &amp; Pin</string>
+    <string name="action_add_host">Add host</string>
+    <string name="action_add_command">Add command</string>
+    <string name="action_map_host_command">Map host ↔ command</string>
+    
+    <!-- Banners -->
+    <string name="banner_auth_failed">Authentication failed.</string>
+    <string name="banner_hostkey_mismatch">Host key mismatch.</string>
+    <string name="banner_timeout">Timed out.</string>
+    <string name="banner_dns">Hostname not found.</string>
+    <string name="banner_refused">Connection refused.</string>
+    
+    <!-- Dialogs -->
+    <string name="dialog_confirm_run_title">Run command?</string>
+    <string name="dialog_confirm_run_body">This will execute on %1$s:\n%2$s</string>
+    <string name="dialog_tofu_title">First-time host</string>
+    <string name="dialog_tofu_body">Verify and trust this host key?\nHost: %1$s\nAlgo: %2$s\nSHA256: %3$s</string>
+    
+    <!-- Terminal -->
+    <string name="terminal_copy_enabled_notice">Copied. Will clear in 60 seconds.</string>
+    
+    <!-- Settings -->
+    <string name="settings_ttl">Session lock timeout</string>
+    <string name="settings_screenshots">Disable screenshots</string>
+    <string name="settings_clipboard">Allow copying command output</string>
+    <string name="settings_log_retention">Log retention</string>
+</resources>
