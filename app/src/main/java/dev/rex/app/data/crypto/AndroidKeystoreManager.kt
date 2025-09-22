@@ -75,11 +75,16 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
         val iv = cipher.iv
         val ciphertext = cipher.doFinal(rawDek)
         
-        // Split ciphertext and tag (last 16 bytes)
-        val actualCiphertext = ciphertext.copyOfRange(0, ciphertext.size - GCM_TAG_LENGTH)
-        val tag = ciphertext.copyOfRange(ciphertext.size - GCM_TAG_LENGTH, ciphertext.size)
-        
-        return WrappedKey(iv, tag, actualCiphertext)
+        try {
+            // Split ciphertext and tag (last 16 bytes)
+            val actualCiphertext = ciphertext.copyOfRange(0, ciphertext.size - GCM_TAG_LENGTH)
+            val tag = ciphertext.copyOfRange(ciphertext.size - GCM_TAG_LENGTH, ciphertext.size)
+            
+            return WrappedKey(iv, tag, actualCiphertext)
+        } finally {
+            // Zeroize the full ciphertext buffer
+            ciphertext.fill(0)
+        }
     }
     
     override suspend fun unwrapDek(wrapped: WrappedKey): ByteArray {
@@ -92,6 +97,11 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
         
         // Reconstruct ciphertext with tag
         val ciphertextWithTag = wrapped.ciphertext + wrapped.tag
-        return cipher.doFinal(ciphertextWithTag)
+        val result = cipher.doFinal(ciphertextWithTag)
+        
+        // Zeroize the reconstructed ciphertext buffer
+        ciphertextWithTag.fill(0)
+        
+        return result
     }
 }

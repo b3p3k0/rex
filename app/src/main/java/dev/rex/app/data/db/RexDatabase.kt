@@ -21,6 +21,8 @@ package dev.rex.app.data.db
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 
 @Database(
@@ -31,7 +33,7 @@ import android.content.Context
         KeyBlobEntity::class,
         LogEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class RexDatabase : RoomDatabase() {
@@ -44,6 +46,20 @@ abstract class RexDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: RexDatabase? = null
+        
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    ALTER TABLE key_blobs ADD COLUMN wrapped_dek_iv BLOB NOT NULL DEFAULT X'00000000000000000000000000000000'
+                """)
+                database.execSQL("""
+                    ALTER TABLE key_blobs ADD COLUMN wrapped_dek_tag BLOB NOT NULL DEFAULT X'00000000000000000000000000000000'
+                """)
+                database.execSQL("""
+                    ALTER TABLE key_blobs ADD COLUMN wrapped_dek_ciphertext BLOB NOT NULL DEFAULT X'00000000000000000000000000000000'
+                """)
+            }
+        }
 
         fun getDatabase(context: Context): RexDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -51,7 +67,9 @@ abstract class RexDatabase : RoomDatabase() {
                     context.applicationContext,
                     RexDatabase::class.java,
                     "rex_database"
-                ).build()
+                )
+                .addMigrations(MIGRATION_1_2)
+                .build()
                 INSTANCE = instance
                 instance
             }

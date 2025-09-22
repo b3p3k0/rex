@@ -43,7 +43,7 @@ class KeyVaultImpl @Inject constructor(
     
     override suspend fun importPrivateKeyPem(pem: ByteArray): KeyBlobId {
         val keyBlobId = KeyBlobId(UUID.randomUUID().toString())
-        val encryptedBlob = encryptWithNewDek(pem)
+        val (encryptedBlob, wrappedDek) = encryptWithNewDek(pem)
         
         val keyBlobEntity = KeyBlobEntity(
             id = keyBlobId.id,
@@ -51,6 +51,9 @@ class KeyVaultImpl @Inject constructor(
             encBlob = encryptedBlob.ciphertext,
             encBlobIv = encryptedBlob.iv,
             encBlobTag = encryptedBlob.tag,
+            wrappedDekIv = wrappedDek.iv,
+            wrappedDekTag = wrappedDek.tag,
+            wrappedDekCiphertext = wrappedDek.ciphertext,
             publicKeyOpenssh = extractPublicKeyFromPem(pem),
             createdAt = System.currentTimeMillis()
         )
@@ -77,11 +80,12 @@ class KeyVaultImpl @Inject constructor(
             ?: throw IllegalArgumentException("Key blob not found: ${id.id}")
         
         return decryptWithDek(
-            WrappedKey(keyBlob.encBlobIv, keyBlob.encBlobTag, keyBlob.encBlob)
+            encryptedData = WrappedKey(keyBlob.encBlobIv, keyBlob.encBlobTag, keyBlob.encBlob),
+            wrappedDek = WrappedKey(keyBlob.wrappedDekIv, keyBlob.wrappedDekTag, keyBlob.wrappedDekCiphertext)
         )
     }
     
-    private suspend fun encryptWithNewDek(plaintext: ByteArray): WrappedKey {
+    private suspend fun encryptWithNewDek(plaintext: ByteArray): Pair<WrappedKey, WrappedKey> {
         // Generate a new DEK
         val dek = ByteArray(DEK_KEY_SIZE)
         SecureRandom().nextBytes(dek)
@@ -95,28 +99,68 @@ class KeyVaultImpl @Inject constructor(
             val iv = cipher.iv
             val ciphertext = cipher.doFinal(plaintext)
             
-            // Split ciphertext and tag
-            val actualCiphertext = ciphertext.copyOfRange(0, ciphertext.size - GCM_TAG_LENGTH)
-            val tag = ciphertext.copyOfRange(ciphertext.size - GCM_TAG_LENGTH, ciphertext.size)
-            
-            // Wrap the DEK with the KEK (this would need to be stored with the key blob)
-            val wrappedDek = keystoreManager.wrapDek(dek)
-            
-            return WrappedKey(iv, tag, actualCiphertext)
+            try {
+                // Split ciphertext and tag
+                val actualCiphertext = ciphertext.copyOfRange(0, ciphertext.size - GCM_TAG_LENGTH)
+                val tag = ciphertext.copyOfRange(ciphertext.size - GCM_TAG_LENGTH, ciphertext.size)
+                
+                // Wrap the DEK with the KEK
+                val wrappedDek = keystoreManager.wrapDek(dek)
+                
+                return Pair(
+                    WrappedKey(iv, tag, actualCiphertext),
+                    wrappedDek
+                )
+            } finally {
+                // Zeroize the ciphertext buffer
+                ciphertext.fill(0)
+            }
         } finally {
             // Zeroize the DEK
             dek.fill(0)
         }
     }
     
-    private suspend fun decryptWithDek(wrappedKey: WrappedKey): ByteArray {
-        // This is a simplified implementation. In practice, we'd need to store
-        // the wrapped DEK with each key blob and unwrap it here.
-        TODO("DEK unwrapping and decryption not fully implemented")
+    private suspend fun decryptWithDek(encryptedData: WrappedKey, wrappedDek: WrappedKey): ByteArray {
+        // Unwrap the DEK using the KEK
+        val dek = keystoreManager.unwrapDek(wrappedDek)
+        
+        try {
+            // Decrypt the data with the DEK
+            val secretKey = SecretKeySpec(dek, "AES")
+            val cipher = Cipher.getInstance(AES_GCM_CIPHER)
+            val gcmSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, encryptedData.iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec)
+            
+            // Reconstruct ciphertext with tag
+            val ciphertextWithTag = encryptedData.ciphertext + encryptedData.tag
+            val result = cipher.doFinal(ciphertextWithTag)
+            
+            // Zeroize the reconstructed ciphertext buffer
+            ciphertextWithTag.fill(0)
+            
+            return result
+        } finally {
+            // Zeroize the DEK
+            dek.fill(0)
+        }
     }
     
     private fun extractPublicKeyFromPem(pem: ByteArray): String {
-        // Placeholder - would parse PEM to extract public key in OpenSSH format
-        return "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... (placeholder)"
+        val pemString = String(pem, Charsets.UTF_8)
+        
+        // Basic PEM validation - check for standard headers
+        if (pemString.contains("-----BEGIN PRIVATE KEY-----") || 
+            pemString.contains("-----BEGIN OPENSSH PRIVATE KEY-----") ||
+            pemString.contains("-----BEGIN EC PRIVATE KEY-----") ||
+            pemString.contains("-----BEGIN RSA PRIVATE KEY-----")) {
+            
+            // For now, return a deterministic placeholder based on content hash
+            // Real implementation would use BouncyCastle to extract public key
+            val hash = pemString.hashCode().toString(16).take(8)
+            return "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI${hash}Rex rex@android"
+        }
+        
+        throw IllegalArgumentException("Invalid PEM format")
     }
 }

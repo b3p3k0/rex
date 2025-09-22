@@ -34,8 +34,8 @@ class HostKeyVerifierImpl @Inject constructor() : HostKeyVerifier {
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(keyData)
         
-        // Encode as base64 (no padding) for OpenSSH format
-        val fingerprint = Base64.encodeToString(hash, Base64.NO_PADDING or Base64.NO_WRAP)
+        // Encode as base64 (no padding) for OpenSSH format with SHA256: prefix
+        val fingerprint = "SHA256:" + Base64.encodeToString(hash, Base64.NO_PADDING or Base64.NO_WRAP)
         
         return HostPin(algorithm, fingerprint)
     }

@@ -25,17 +25,18 @@ import androidx.navigation.compose.composable
 import dev.rex.app.ui.screens.AddCommandScreen
 import dev.rex.app.ui.screens.AddHostScreen
 import dev.rex.app.ui.screens.MainTableScreen
+import dev.rex.app.ui.screens.SessionScreen
 
 object RexDestinations {
     const val MAIN_TABLE = "main_table"
     const val HOST_EDIT = "host_edit"
     const val COMMAND_EDIT = "command_edit"
+    const val SESSION = "session"
 }
 
 @Composable
 fun RexNavigation(
-    navController: NavHostController,
-    onExecuteCommand: (dev.rex.app.data.db.HostCommandMapping) -> Unit
+    navController: NavHostController
 ) {
     NavHost(
         navController = navController,
@@ -52,7 +53,10 @@ fun RexNavigation(
                 onNavigateToSettings = {
                     // Settings not implemented in this slice
                 },
-                onExecuteCommand = onExecuteCommand
+                onExecuteCommand = { hostCommand ->
+                    // Navigate to session screen for real execution
+                    navController.navigate("${RexDestinations.SESSION}/${hostCommand.nickname}/${hostCommand.name}")
+                }
             )
         }
 
@@ -66,6 +70,19 @@ fun RexNavigation(
 
         composable(RexDestinations.COMMAND_EDIT) {
             AddCommandScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("${RexDestinations.SESSION}/{hostNickname}/{commandName}") { backStackEntry ->
+            val hostNickname = backStackEntry.arguments?.getString("hostNickname") ?: ""
+            val commandName = backStackEntry.arguments?.getString("commandName") ?: ""
+            
+            SessionScreen(
+                hostNickname = hostNickname,
+                commandName = commandName,
                 onNavigateBack = {
                     navController.popBackStack()
                 }

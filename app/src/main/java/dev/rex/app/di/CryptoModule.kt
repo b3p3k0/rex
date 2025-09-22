@@ -47,4 +47,10 @@ abstract class CryptoModule {
     abstract fun bindHostKeyVerifier(
         hostKeyVerifierImpl: HostKeyVerifierImpl
     ): HostKeyVerifier
+
+    @Binds
+    @Singleton
+    abstract fun bindSshClient(
+        sshjClient: SshjClient
+    ): SshClient
 }

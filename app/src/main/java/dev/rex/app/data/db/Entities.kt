@@ -84,6 +84,9 @@ data class KeyBlobEntity(
     @ColumnInfo(name = "enc_blob") val encBlob: ByteArray,
     @ColumnInfo(name = "enc_blob_iv") val encBlobIv: ByteArray,
     @ColumnInfo(name = "enc_blob_tag") val encBlobTag: ByteArray,
+    @ColumnInfo(name = "wrapped_dek_iv") val wrappedDekIv: ByteArray,
+    @ColumnInfo(name = "wrapped_dek_tag") val wrappedDekTag: ByteArray,
+    @ColumnInfo(name = "wrapped_dek_ciphertext") val wrappedDekCiphertext: ByteArray,
     @ColumnInfo(name = "public_key_openssh") val publicKeyOpenssh: String,
     @ColumnInfo(name = "created_at") val createdAt: Long
 ) {
@@ -98,6 +101,9 @@ data class KeyBlobEntity(
         if (!encBlob.contentEquals(other.encBlob)) return false
         if (!encBlobIv.contentEquals(other.encBlobIv)) return false
         if (!encBlobTag.contentEquals(other.encBlobTag)) return false
+        if (!wrappedDekIv.contentEquals(other.wrappedDekIv)) return false
+        if (!wrappedDekTag.contentEquals(other.wrappedDekTag)) return false
+        if (!wrappedDekCiphertext.contentEquals(other.wrappedDekCiphertext)) return false
         if (publicKeyOpenssh != other.publicKeyOpenssh) return false
         if (createdAt != other.createdAt) return false
         
@@ -110,6 +116,9 @@ data class KeyBlobEntity(
         result = 31 * result + encBlob.contentHashCode()
         result = 31 * result + encBlobIv.contentHashCode()
         result = 31 * result + encBlobTag.contentHashCode()
+        result = 31 * result + wrappedDekIv.contentHashCode()
+        result = 31 * result + wrappedDekTag.contentHashCode()
+        result = 31 * result + wrappedDekCiphertext.contentHashCode()
         result = 31 * result + publicKeyOpenssh.hashCode()
         result = 31 * result + createdAt.hashCode()
         return result
