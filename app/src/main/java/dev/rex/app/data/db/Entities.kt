@@ -116,6 +116,29 @@ data class KeyBlobEntity(
     }
 }
 
+data class HostCommandMapping(
+    val id: String,
+    val nickname: String,
+    val hostname: String,
+    val port: Int,
+    val username: String,
+    @ColumnInfo(name = "auth_method") val authMethod: String,
+    @ColumnInfo(name = "key_blob_id") val keyBlobId: String?,
+    @ColumnInfo(name = "connect_timeout_ms") val connectTimeoutMs: Int,
+    @ColumnInfo(name = "read_timeout_ms") val readTimeoutMs: Int,
+    @ColumnInfo(name = "strict_host_key") val strictHostKey: Boolean,
+    @ColumnInfo(name = "pinned_host_key_fingerprint") val pinnedHostKeyFingerprint: String?,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    val name: String,
+    val command: String,
+    @ColumnInfo(name = "require_confirmation") val requireConfirmation: Boolean,
+    @ColumnInfo(name = "default_timeout_ms") val defaultTimeoutMs: Int,
+    @ColumnInfo(name = "allow_pty") val allowPty: Boolean,
+    @ColumnInfo(name = "mapping_id") val mappingId: String,
+    @ColumnInfo(name = "sort_index") val sortIndex: Int
+)
+
 @Entity(tableName = "logs")
 data class LogEntity(
     @PrimaryKey val id: String,

@@ -65,6 +65,19 @@ interface HostCommandsDao {
     @Query("SELECT * FROM host_commands WHERE host_id = :hostId ORDER BY sort_index ASC")
     fun getHostCommandsByHostId(hostId: String): Flow<List<HostCommandEntity>>
 
+    @Query("""
+        SELECT h.id, h.nickname, h.hostname, h.port, h.username, 
+               h.auth_method, h.key_blob_id, h.connect_timeout_ms, h.read_timeout_ms,
+               h.strict_host_key, h.pinned_host_key_fingerprint, h.created_at, h.updated_at,
+               c.name, c.command, c.require_confirmation, c.default_timeout_ms, c.allow_pty,
+               hc.id as mapping_id, hc.sort_index
+        FROM host_commands hc
+        INNER JOIN hosts h ON hc.host_id = h.id
+        INNER JOIN commands c ON hc.command_id = c.id
+        ORDER BY hc.sort_index ASC
+    """)
+    fun getHostCommandMappings(): Flow<List<HostCommandMapping>>
+
     @Insert
     suspend fun insertHostCommand(hostCommand: HostCommandEntity)
 

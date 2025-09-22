@@ -78,4 +78,9 @@ object DatabaseModule {
     @Singleton
     fun provideKeysRepository(keyBlobsDao: KeyBlobsDao): KeysRepository = 
         KeysRepository(keyBlobsDao)
+
+    @Provides
+    @Singleton
+    fun provideHostCommandRepository(hostCommandsDao: HostCommandsDao): HostCommandRepository = 
+        HostCommandRepository(hostCommandsDao)
 }
