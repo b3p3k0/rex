@@ -152,3 +152,55 @@ The `rex_dev_setup.sh --launch` script includes quality gates:
 - Colors.xml provides Material3 seed color system (#6750A4)
 - AppCompat/Material dependencies ensure proper fallback support
 - Transparent status bar configuration for modern UI
+
+## Debugging and Troubleshooting
+
+### Device and Emulator State
+```bash
+# See devices and emulator state
+adb devices -l
+adb -e shell getprop sys.boot_completed
+
+# Check emulator boot progress
+adb -e shell getprop sys.boot_completed
+adb -e shell getprop dev.bootcomplete
+```
+
+### Application Management
+```bash
+# Launch app manually
+adb shell am start -n dev.rex.app/.MainActivity
+
+# Reinstall fast after changes
+./gradlew assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# Check if app is running
+adb shell pidof dev.rex.app
+```
+
+### Live Debugging
+```bash
+# Live logs for just the app
+pid=$(adb shell pidof dev.rex.app); adb logcat --pid "$pid"
+
+# Crash trace quickly
+adb logcat -d | grep -A20 -B20 "FATAL EXCEPTION"
+
+# Filter for specific tags
+adb logcat -s "Rex" "Hilt" "Room"
+
+# Clear logs and monitor fresh
+adb logcat -c && adb logcat
+```
+
+### Build Troubleshooting
+```bash
+# Quick lint and build cycle
+./gradlew lint && ./gradlew assembleDebug
+
+# Clean build when dependencies change
+./gradlew clean assembleDebug
+
+# Check for Hilt/Room annotation processing issues
+./gradlew kaptDebugKotlin
+```

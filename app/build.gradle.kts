@@ -17,7 +17,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.google.dagger.hilt.android.testing.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -52,6 +52,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1,LICENSE*,NOTICE*}"
         }
+    }
+    
+    lint {
+        checkTestSources = false
     }
 }
 
@@ -116,6 +120,8 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    androidTestImplementation("androidx.hilt:hilt-android-testing:1.2.0")
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.52")
     kaptAndroidTest("com.google.dagger:hilt-android-compiler:2.52")
+    testImplementation("com.google.dagger:hilt-android-testing:2.52")
+    kaptTest("com.google.dagger:hilt-android-compiler:2.52")
 }
