@@ -18,14 +18,18 @@
 
 package dev.rex.app.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -36,29 +40,56 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.rex.app.data.db.HostCommandMapping
-import dev.rex.app.ui.components.HostCommandRow
+import dev.rex.app.data.db.HostCommandRow
+import dev.rex.app.ui.components.AboutDialog
+import dev.rex.app.ui.components.HostCommandRow as HostCommandRowComponent
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainTableScreen(
     onNavigateToAddHost: () -> Unit,
-    onNavigateToAddCommand: () -> Unit,
+    onNavigateToAddCommand: (String) -> Unit,
+    onNavigateToEditCommand: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToHostDetail: (String) -> Unit,
     onExecuteCommand: (HostCommandMapping) -> Unit,
     viewModel: MainTableViewModel = hiltViewModel()
 ) {
-    val hostCommands by viewModel.hostCommands.collectAsStateWithLifecycle()
-    var showAddMenu by remember { mutableStateOf(false) }
+    Log.i("Rex", "Screen: MainTableScreen")
+    val hostCommandRows by viewModel.hostCommandRows.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    var showAbout by remember { mutableStateOf(false) }
+    
+    // Group by host to avoid duplicate host entries
+    val groupedByHost = remember(hostCommandRows) {
+        val grouped = hostCommandRows.groupBy { it.hostId }
+        Log.d("Rex", "MainTableScreen: groupedByHost has ${grouped.size} hosts, total rows=${hostCommandRows.size}")
+        grouped
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Rex") },
                 actions = {
                     IconButton(
+                        onClick = { showAbout = true },
+                        modifier = Modifier.semantics {
+                            contentDescription = "Open about dialog"
+                        }
+                    ) {
+                        Icon(Icons.Filled.HelpOutline, contentDescription = "Open about dialog")
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    IconButton(
                         onClick = onNavigateToSettings,
-                        modifier = Modifier.semantics { 
-                            contentDescription = "Settings" 
+                        modifier = Modifier.semantics {
+                            contentDescription = "Settings"
                         }
                     ) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -68,12 +99,12 @@ fun MainTableScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddMenu = true },
-                modifier = Modifier.semantics { 
-                    contentDescription = "Add Host or Command" 
+                onClick = onNavigateToAddHost,
+                modifier = Modifier.semantics {
+                    contentDescription = "Add host"
                 }
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add")
+                Icon(Icons.Filled.Add, contentDescription = "Add host")
             }
         }
     ) { paddingValues ->
@@ -83,7 +114,7 @@ fun MainTableScreen(
                 .padding(paddingValues)
         ) {
             when {
-                hostCommands.isEmpty() -> {
+                groupedByHost.isEmpty() -> {
                     EmptyState(
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -94,30 +125,205 @@ fun MainTableScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(hostCommands) { hostCommand ->
-                            HostCommandRow(
-                                hostCommand = hostCommand,
-                                onExecute = { onExecuteCommand(hostCommand) }
+                        items(groupedByHost.keys.toList()) { hostId ->
+                            val hostRows = groupedByHost[hostId]!!
+                            val hostRow = hostRows.first() // Host info is same across rows
+                            
+                            HostRowItem(
+                                hostRow = hostRow,
+                                commands = hostRows.mapNotNull { row ->
+                                    if (row.cmdId != null && row.cmdName != null && row.cmdCommand != null) {
+                                        HostCommandMapping(
+                                            id = hostRow.hostId,
+                                            nickname = hostRow.hostNickname,
+                                            hostname = hostRow.hostName,
+                                            port = hostRow.hostPort,
+                                            username = hostRow.hostUser,
+                                            authMethod = hostRow.hostAuthMethod,
+                                            keyBlobId = hostRow.hostKeyBlobId,
+                                            connectTimeoutMs = hostRow.hostConnectTimeoutMs,
+                                            readTimeoutMs = hostRow.hostReadTimeoutMs,
+                                            strictHostKey = hostRow.hostStrictHostKey,
+                                            pinnedHostKeyFingerprint = hostRow.hostPinnedHostKeyFingerprint,
+                                            keyProvisionedAt = hostRow.hostKeyProvisionedAt,
+                                            keyProvisionStatus = hostRow.hostKeyProvisionStatus,
+                                            createdAt = hostRow.hostCreatedAt,
+                                            updatedAt = hostRow.hostUpdatedAt,
+                                            name = row.cmdName,
+                                            command = row.cmdCommand,
+                                            requireConfirmation = row.cmdRequireConfirmation ?: true,
+                                            defaultTimeoutMs = row.cmdDefaultTimeoutMs ?: 15000,
+                                            allowPty = row.cmdAllowPty ?: false,
+                                            mappingId = row.mappingId ?: "",
+                                            sortIndex = row.sortIndex ?: 0
+                                        )
+                                    } else null
+                                },
+                                onExecuteCommand = onExecuteCommand,
+                                onNavigateToAddCommand = onNavigateToAddCommand,
+                                onNavigateToEditCommand = onNavigateToEditCommand,
+                                onNavigateToHostDetail = onNavigateToHostDetail,
+                                onDeleteCommand = { commandId ->
+                                    viewModel.onDeleteCommand(commandId)
+                                },
+                                onDeleteHost = {
+                                    viewModel.onDeleteHost(hostRow.hostId, hostRow.hostNickname)
+                                    // Show snackbar confirmation
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Host \"${hostRow.hostNickname}\" deleted",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                }
                             )
                         }
                     }
                 }
             }
         }
+    }
 
-        if (showAddMenu) {
-            AddMenuDialog(
-                onDismiss = { showAddMenu = false },
-                onAddHost = {
-                    showAddMenu = false
-                    onNavigateToAddHost()
-                },
-                onAddCommand = {
-                    showAddMenu = false
-                    onNavigateToAddCommand()
+    // Show About dialog when requested
+    if (showAbout) {
+        AboutDialog(onDismiss = { showAbout = false })
+    }
+}
+
+@Composable
+private fun HostRowItem(
+    hostRow: HostCommandRow,
+    commands: List<HostCommandMapping>,
+    onExecuteCommand: (HostCommandMapping) -> Unit,
+    onNavigateToAddCommand: (String) -> Unit,
+    onNavigateToEditCommand: (String) -> Unit,
+    onNavigateToHostDetail: (String) -> Unit,
+    onDeleteCommand: (String) -> Unit,
+    onDeleteHost: () -> Unit
+) {
+    Log.d("Rex", "HostRowItem: ${hostRow.hostNickname} with ${commands.size} commands")
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Host header row with action buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${hostRow.hostNickname} (${hostRow.hostUser}@${hostRow.hostName}:${hostRow.hostPort})",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Host: ${hostRow.hostNickname}"
+                        }
+                    )
                 }
-            )
+                Row {
+                    IconButton(
+                        onClick = { onNavigateToHostDetail(hostRow.hostId) }
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Manage SSH keys for ${hostRow.hostNickname}"
+                        )
+                    }
+                    IconButton(
+                        onClick = { showDeleteConfirm = true },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete host ${hostRow.hostNickname}"
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (commands.isEmpty()) {
+                // No commands yet
+                Text(
+                    text = "No commands yet",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                // Show commands
+                commands.forEach { command ->
+                    HostCommandRowComponent(
+                        hostCommand = command,
+                        onExecute = { onExecuteCommand(command) },
+                        onEdit = { mappingId ->
+                            // Extract command ID from mappingId format: hostId_commandId
+                            val commandId = mappingId.substringAfter("_")
+                            onNavigateToEditCommand(commandId)
+                        },
+                        onDelete = { mappingId ->
+                            // Extract command ID from mappingId format: hostId_commandId
+                            val commandId = mappingId.substringAfter("_")
+                            onDeleteCommand(commandId)
+                        }
+                    )
+                    if (command != commands.last()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
+
+            // Always show Add Command button
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { onNavigateToAddCommand(hostRow.hostId) },
+                modifier = Modifier.semantics {
+                    contentDescription = "Add command for ${hostRow.hostNickname}"
+                }
+            ) {
+                Text("Add command")
+            }
         }
+    }
+    
+    // Confirmation Dialog
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete host?") },
+            text = { 
+                if (commands.isEmpty()) {
+                    Text("This will remove \"${hostRow.hostNickname}\".")
+                } else {
+                    Text("This will remove \"${hostRow.hostNickname}\" and ${commands.size} command mapping(s).")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeleteHost()
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { 
+                    Text("Delete") 
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { 
+                    Text("Cancel") 
+                }
+            }
+        )
     }
 }
 
@@ -136,7 +342,7 @@ private fun EmptyState(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Tap + to add one",
+            text = "Tap + to add host",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -144,39 +350,3 @@ private fun EmptyState(
     }
 }
 
-@Composable
-private fun AddMenuDialog(
-    onDismiss: () -> Unit,
-    onAddHost: () -> Unit,
-    onAddCommand: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add new") },
-        text = {
-            Column {
-                TextButton(
-                    onClick = onAddHost,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { contentDescription = "Add Host" }
-                ) {
-                    Text("Add Host")
-                }
-                TextButton(
-                    onClick = onAddCommand,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { contentDescription = "Add Command" }
-                ) {
-                    Text("Add Command")
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}

@@ -27,16 +27,36 @@ import javax.inject.Singleton
 class HostKeyVerifierImpl @Inject constructor() : HostKeyVerifier {
     
     override fun computeFingerprint(pubKey: ByteArray): HostPin {
-        // Extract algorithm and key data based on OpenSSH public key format
-        val (algorithm, keyData) = parseOpenSshPublicKey(pubKey)
-        
-        // Compute SHA256 hash
+        return try {
+            // Try to parse as OpenSSH format first
+            val (algorithm, keyData) = parseOpenSshPublicKey(pubKey)
+            computeFingerprintFromKeyData(algorithm, keyData)
+        } catch (e: Exception) {
+            // Fallback: assume raw DER/X.509 format from SSH transport
+            computeFingerprintFromRawKey(pubKey)
+        }
+    }
+
+    private fun computeFingerprintFromKeyData(algorithm: String, keyData: ByteArray): HostPin {
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(keyData)
-        
-        // Encode as base64 (no padding) for OpenSSH format with SHA256: prefix
         val fingerprint = "SHA256:" + Base64.encodeToString(hash, Base64.NO_PADDING or Base64.NO_WRAP)
-        
+        return HostPin(algorithm, fingerprint)
+    }
+
+    private fun computeFingerprintFromRawKey(pubKey: ByteArray): HostPin {
+        // For raw keys from SSH transport, hash the entire key
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(pubKey)
+        val fingerprint = "SHA256:" + Base64.encodeToString(hash, Base64.NO_PADDING or Base64.NO_WRAP)
+
+        // Determine algorithm from key data (simplified)
+        val algorithm = when {
+            pubKey.size == 32 -> "ssh-ed25519"
+            pubKey.size > 256 -> "ssh-rsa"
+            else -> "ssh-ecdsa"
+        }
+
         return HostPin(algorithm, fingerprint)
     }
     

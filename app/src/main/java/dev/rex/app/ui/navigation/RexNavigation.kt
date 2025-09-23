@@ -24,14 +24,20 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import dev.rex.app.ui.screens.AddCommandScreen
 import dev.rex.app.ui.screens.AddHostScreen
+import dev.rex.app.ui.screens.EditCommandScreen
+import dev.rex.app.ui.screens.HostDetailScreen
 import dev.rex.app.ui.screens.MainTableScreen
 import dev.rex.app.ui.screens.SessionScreen
+import dev.rex.app.ui.screens.SettingsScreen
 
 object RexDestinations {
     const val MAIN_TABLE = "main_table"
     const val HOST_EDIT = "host_edit"
-    const val COMMAND_EDIT = "command_edit"
+    const val HOST_DETAIL = "host_detail"
+    const val ADD_COMMAND = "add-command"
+    const val COMMAND_EDIT_EXISTING = "command_edit_existing"
     const val SESSION = "session"
+    const val SETTINGS = "settings"
 }
 
 @Composable
@@ -47,11 +53,17 @@ fun RexNavigation(
                 onNavigateToAddHost = {
                     navController.navigate(RexDestinations.HOST_EDIT)
                 },
-                onNavigateToAddCommand = {
-                    navController.navigate(RexDestinations.COMMAND_EDIT)
+                onNavigateToAddCommand = { hostId ->
+                    navController.navigate("${RexDestinations.ADD_COMMAND}/$hostId")
+                },
+                onNavigateToEditCommand = { commandId ->
+                    navController.navigate("${RexDestinations.COMMAND_EDIT_EXISTING}/$commandId")
                 },
                 onNavigateToSettings = {
-                    // Settings not implemented in this slice
+                    navController.navigate(RexDestinations.SETTINGS)
+                },
+                onNavigateToHostDetail = { hostId ->
+                    navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId")
                 },
                 onExecuteCommand = { hostCommand ->
                     // Navigate to session screen for real execution
@@ -68,8 +80,30 @@ fun RexNavigation(
             )
         }
 
-        composable(RexDestinations.COMMAND_EDIT) {
+        composable("${RexDestinations.HOST_DETAIL}/{hostId}") { backStackEntry ->
+            val hostId = backStackEntry.arguments?.getString("hostId") ?: ""
+            HostDetailScreen(
+                hostId = hostId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("${RexDestinations.ADD_COMMAND}/{hostId}") { backStackEntry ->
+            val hostId = backStackEntry.arguments?.getString("hostId") ?: ""
             AddCommandScreen(
+                hostId = hostId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("${RexDestinations.COMMAND_EDIT_EXISTING}/{commandId}") { backStackEntry ->
+            val commandId = backStackEntry.arguments?.getString("commandId") ?: ""
+            EditCommandScreen(
+                commandId = commandId,
                 onNavigateBack = {
                     navController.popBackStack()
                 }
@@ -79,10 +113,18 @@ fun RexNavigation(
         composable("${RexDestinations.SESSION}/{hostNickname}/{commandName}") { backStackEntry ->
             val hostNickname = backStackEntry.arguments?.getString("hostNickname") ?: ""
             val commandName = backStackEntry.arguments?.getString("commandName") ?: ""
-            
+
             SessionScreen(
                 hostNickname = hostNickname,
                 commandName = commandName,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(RexDestinations.SETTINGS) {
+            SettingsScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }

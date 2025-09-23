@@ -18,18 +18,38 @@
 
 package dev.rex.app.data.repo
 
+import dev.rex.app.core.Gatekeeper
 import dev.rex.app.data.db.KeyBlobEntity
 import dev.rex.app.data.db.KeyBlobsDao
+import dev.rex.app.data.db.KeyProvisionLogsDao
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class KeysRepository @Inject constructor(
-    private val keyBlobsDao: KeyBlobsDao
+    private val keyBlobsDao: KeyBlobsDao,
+    private val keyProvisionLogsDao: KeyProvisionLogsDao,
+    private val gatekeeper: Gatekeeper
 ) {
     suspend fun getKeyBlobById(id: String): KeyBlobEntity? = keyBlobsDao.getKeyBlobById(id)
-    
-    suspend fun insertKeyBlob(keyBlob: KeyBlobEntity) = keyBlobsDao.insertKeyBlob(keyBlob)
-    
-    suspend fun deleteKeyBlob(keyBlob: KeyBlobEntity) = keyBlobsDao.deleteKeyBlob(keyBlob)
+
+    suspend fun insertKeyBlob(keyBlob: KeyBlobEntity) {
+        gatekeeper.requireGateForKeyOperation()
+        keyBlobsDao.insertKeyBlob(keyBlob)
+    }
+
+    suspend fun deleteKeyBlob(keyBlob: KeyBlobEntity) {
+        gatekeeper.requireGateForKeyOperation()
+        keyBlobsDao.deleteKeyBlob(keyBlob)
+    }
+
+    suspend fun getProvisionLogsByHost(hostId: String) =
+        keyProvisionLogsDao.getProvisionLogsByHost(hostId)
+
+    suspend fun getProvisionLogsByKey(keyBlobId: String) =
+        keyProvisionLogsDao.getProvisionLogsByKey(keyBlobId)
+
+    suspend fun insertProvisionLog(log: dev.rex.app.data.db.KeyProvisionLogEntity) {
+        keyProvisionLogsDao.insertProvisionLog(log)
+    }
 }

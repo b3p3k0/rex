@@ -18,38 +18,69 @@
 
 package dev.rex.app.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddCommandScreen(
+    hostId: String,
     onNavigateBack: () -> Unit,
     viewModel: AddCommandViewModel = hiltViewModel()
 ) {
+    Log.i("Rex", "Screen: AddCommandScreen")
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Handle host not found
+    LaunchedEffect(uiState.hostNotFound) {
+        if (uiState.hostNotFound) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Host not found")
+                onNavigateBack()
+            }
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Add Command") },
+                title = {
+                    Text(
+                        if (uiState.hostNickname.isNotEmpty()) {
+                            "Add command for ${uiState.hostNickname}"
+                        } else {
+                            "Add command"
+                        }
+                    )
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
-                        modifier = Modifier.semantics { 
-                            contentDescription = "Go back" 
+                        modifier = Modifier.semantics {
+                            contentDescription = "Go back"
                         }
                     ) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -78,7 +109,18 @@ fun AddCommandScreen(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
                 isError = uiState.commandError != null,
-                supportingText = uiState.commandError?.let { { Text(it) } }
+                supportingText = uiState.commandError?.let { { Text(it) } },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (uiState.canSave) {
+                            keyboardController?.hide()
+                            viewModel.saveCommand {
+                                onNavigateBack()
+                            }
+                        }
+                    }
+                )
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -95,8 +137,8 @@ fun AddCommandScreen(
                 }
                 Button(
                     onClick = {
-                        viewModel.saveCommand { 
-                            onNavigateBack() 
+                        viewModel.saveCommand {
+                            onNavigateBack()
                         }
                     },
                     modifier = Modifier.weight(1f),

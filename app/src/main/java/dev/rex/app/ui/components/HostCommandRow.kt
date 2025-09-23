@@ -19,8 +19,11 @@
 package dev.rex.app.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -32,8 +35,11 @@ import dev.rex.app.data.db.HostCommandMapping
 fun HostCommandRow(
     hostCommand: HostCommandMapping,
     onExecute: (HostCommandMapping) -> Unit,
+    onEdit: (String) -> Unit = {},
+    onDelete: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -61,15 +67,69 @@ fun HostCommandRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
-            Button(
-                onClick = { onExecute(hostCommand) },
-                modifier = Modifier.semantics { 
-                    contentDescription = "Run ${hostCommand.name} on ${hostCommand.nickname}" 
-                }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Run")
+                IconButton(
+                    onClick = { onEdit(hostCommand.mappingId) },
+                    modifier = Modifier.semantics {
+                        contentDescription = "Edit ${hostCommand.name}"
+                    }
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit")
+                }
+
+                IconButton(
+                    onClick = { showDeleteConfirm = true },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.semantics {
+                        contentDescription = "Delete ${hostCommand.name}"
+                    }
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                }
+
+                Button(
+                    onClick = { onExecute(hostCommand) },
+                    modifier = Modifier.semantics {
+                        contentDescription = "Run ${hostCommand.name} on ${hostCommand.nickname}"
+                    }
+                ) {
+                    Text("Run")
+                }
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete command?") },
+            text = {
+                Text("This will remove the command \"${hostCommand.name}\" from ${hostCommand.nickname}.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete(hostCommand.mappingId)
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

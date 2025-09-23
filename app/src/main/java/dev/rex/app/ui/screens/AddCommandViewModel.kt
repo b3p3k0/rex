@@ -18,12 +18,15 @@
 
 package dev.rex.app.ui.screens
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.rex.app.core.GlobalCEH
 import dev.rex.app.data.db.CommandEntity
 import dev.rex.app.data.repo.CommandsRepository
+import dev.rex.app.data.repo.HostsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,43 +37,92 @@ import javax.inject.Inject
 data class AddCommandUiState(
     val name: String = "",
     val command: String = "",
+    val hostNickname: String = "",
     val nameError: String? = null,
     val commandError: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val hostNotFound: Boolean = false
 ) {
     val canSave: Boolean
-        get() = name.isNotBlank() && 
-                command.isNotBlank() && 
-                nameError == null && 
+        get() = name.isNotBlank() &&
+                command.isNotBlank() &&
+                nameError == null &&
                 commandError == null &&
-                !isLoading
+                !isLoading &&
+                !hostNotFound
 }
 
 @HiltViewModel
 class AddCommandViewModel @Inject constructor(
     private val commandsRepository: CommandsRepository,
+    private val hostsRepository: HostsRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+
+    private val hostId: String = savedStateHandle.get<String>("hostId") ?: ""
 
     private val _uiState = MutableStateFlow(AddCommandUiState())
     val uiState: StateFlow<AddCommandUiState> = _uiState.asStateFlow()
 
+    init {
+        loadHostInfo()
+    }
+
+    private fun loadHostInfo() {
+        if (hostId.isEmpty()) {
+            _uiState.value = _uiState.value.copy(hostNotFound = true)
+            return
+        }
+
+        viewModelScope.launch(GlobalCEH.handler) {
+            try {
+                val host = hostsRepository.getHostById(hostId)
+                if (host != null) {
+                    _uiState.value = _uiState.value.copy(
+                        hostNickname = host.nickname,
+                        hostNotFound = false
+                    )
+                    Log.d("Rex", "Loaded host for add command: ${host.nickname}")
+                } else {
+                    _uiState.value = _uiState.value.copy(hostNotFound = true)
+                    Log.e("Rex", "Host not found: $hostId")
+                }
+            } catch (e: Exception) {
+                Log.e("Rex", "Failed to load host $hostId: ${e.message}")
+                _uiState.value = _uiState.value.copy(hostNotFound = true)
+            }
+        }
+    }
+
     fun updateName(name: String) {
         _uiState.value = _uiState.value.copy(
             name = name,
-            nameError = if (name.isBlank()) "Command name is required" else null
+            nameError = validateName(name)
         )
     }
 
     fun updateCommand(command: String) {
         _uiState.value = _uiState.value.copy(
             command = command,
-            commandError = when {
-                command.isBlank() -> "Command is required"
-                command.contains('\u0000') -> "Command cannot contain null bytes"
-                else -> null
-            }
+            commandError = validateCommand(command)
         )
+    }
+
+    private fun validateName(name: String): String? {
+        return when {
+            name.isBlank() -> "Command name is required"
+            name.length > 100 -> "Name must be 100 characters or less"
+            else -> null
+        }
+    }
+
+    private fun validateCommand(command: String): String? {
+        return when {
+            command.isBlank() -> "Command is required"
+            command.contains('\u0000') -> "Command cannot contain null bytes"
+            command.length > 1000 -> "Command must be 1000 characters or less"
+            else -> null
+        }
     }
 
     fun saveCommand(onSuccess: () -> Unit) {
@@ -79,7 +131,7 @@ class AddCommandViewModel @Inject constructor(
 
         _uiState.value = currentState.copy(isLoading = true)
 
-        viewModelScope.launch {
+        viewModelScope.launch(GlobalCEH.handler) {
             try {
                 val command = CommandEntity(
                     id = UUID.randomUUID().toString(),
@@ -91,10 +143,13 @@ class AddCommandViewModel @Inject constructor(
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis()
                 )
-                
-                commandsRepository.insertCommand(command)
+
+                val commandId = commandsRepository.addCommandForHost(hostId, command)
+                Log.d("Rex", "Saved command=$commandId for host=$hostId")
+                _uiState.value = currentState.copy(isLoading = false)
                 onSuccess()
             } catch (e: Exception) {
+                Log.e("Rex", "Failed to save command for host $hostId: ${e.message}")
                 _uiState.value = currentState.copy(
                     isLoading = false,
                     commandError = "Failed to save command: ${e.message}"

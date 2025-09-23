@@ -21,6 +21,7 @@ package dev.rex.app.data.db
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "hosts")
@@ -36,6 +37,8 @@ data class HostEntity(
     @ColumnInfo(name = "read_timeout_ms") val readTimeoutMs: Int = 15000,
     @ColumnInfo(name = "strict_host_key") val strictHostKey: Boolean = true,
     @ColumnInfo(name = "pinned_host_key_fingerprint") val pinnedHostKeyFingerprint: String?,
+    @ColumnInfo(name = "key_provisioned_at") val keyProvisionedAt: Long? = null,
+    @ColumnInfo(name = "key_provision_status") val keyProvisionStatus: String = "none",
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long
 )
@@ -54,6 +57,8 @@ data class CommandEntity(
 
 @Entity(
     tableName = "host_commands",
+    primaryKeys = ["host_id", "command_id"],
+    indices = [Index(value = ["host_id", "command_id"], unique = true)],
     foreignKeys = [
         ForeignKey(
             entity = HostEntity::class,
@@ -70,11 +75,10 @@ data class CommandEntity(
     ]
 )
 data class HostCommandEntity(
-    @PrimaryKey val id: String,
     @ColumnInfo(name = "host_id") val hostId: String,
     @ColumnInfo(name = "command_id") val commandId: String,
-    @ColumnInfo(name = "sort_index") val sortIndex: Int,
-    @ColumnInfo(name = "created_at") val createdAt: Long
+    @ColumnInfo(name = "sort_index") val sortIndex: Int = 0,
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "key_blobs")
@@ -137,6 +141,8 @@ data class HostCommandMapping(
     @ColumnInfo(name = "read_timeout_ms") val readTimeoutMs: Int,
     @ColumnInfo(name = "strict_host_key") val strictHostKey: Boolean,
     @ColumnInfo(name = "pinned_host_key_fingerprint") val pinnedHostKeyFingerprint: String?,
+    @ColumnInfo(name = "key_provisioned_at") val keyProvisionedAt: Long?,
+    @ColumnInfo(name = "key_provision_status") val keyProvisionStatus: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     val name: String,
@@ -146,6 +152,32 @@ data class HostCommandMapping(
     @ColumnInfo(name = "allow_pty") val allowPty: Boolean,
     @ColumnInfo(name = "mapping_id") val mappingId: String,
     @ColumnInfo(name = "sort_index") val sortIndex: Int
+)
+
+data class HostCommandRow(
+    val hostId: String,
+    val hostNickname: String,
+    val hostName: String,
+    val hostPort: Int,
+    val hostUser: String,
+    val hostAuthMethod: String,
+    val hostKeyBlobId: String?,
+    val hostConnectTimeoutMs: Int,
+    val hostReadTimeoutMs: Int,
+    val hostStrictHostKey: Boolean,
+    val hostPinnedHostKeyFingerprint: String?,
+    val hostKeyProvisionedAt: Long?,
+    val hostKeyProvisionStatus: String,
+    val hostCreatedAt: Long,
+    val hostUpdatedAt: Long,
+    val cmdId: String?,       // nullable when no commands
+    val cmdName: String?,     // nullable
+    val cmdCommand: String?,  // nullable
+    val cmdRequireConfirmation: Boolean?,
+    val cmdDefaultTimeoutMs: Int?,
+    val cmdAllowPty: Boolean?,
+    val mappingId: String?,   // nullable
+    val sortIndex: Int?       // nullable
 )
 
 @Entity(tableName = "logs")
@@ -161,4 +193,34 @@ data class LogEntity(
     val status: String,
     @ColumnInfo(name = "message_redacted") val messageRedacted: String?,
     @ColumnInfo(name = "idx_seq") val idxSeq: Long
+)
+
+@Entity(
+    tableName = "key_provision_logs",
+    foreignKeys = [
+        ForeignKey(
+            entity = HostEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["host_id"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = KeyBlobEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["key_blob_id"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ]
+)
+data class KeyProvisionLogEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "host_id") val hostId: String,
+    @ColumnInfo(name = "key_blob_id") val keyBlobId: String,
+    val ts: Long,
+    val operation: String,
+    val status: String,
+    @ColumnInfo(name = "duration_ms") val durationMs: Int?,
+    @ColumnInfo(name = "stdout_preview") val stdoutPreview: String?,
+    @ColumnInfo(name = "stderr_preview") val stderrPreview: String?,
+    @ColumnInfo(name = "error_message") val errorMessage: String?
 )

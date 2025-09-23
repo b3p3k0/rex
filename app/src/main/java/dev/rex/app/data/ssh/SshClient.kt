@@ -23,6 +23,8 @@ import okio.ByteString
 
 data class HostPin(val alg: String, val sha256: String)
 
+class HostKeyMismatchException(message: String) : Exception(message)
+
 interface HostKeyVerifier {
     fun computeFingerprint(pubKey: ByteArray): HostPin
     fun verifyPinned(expected: HostPin, actual: HostPin): Boolean
@@ -35,12 +37,14 @@ interface SshClient : AutoCloseable {
         timeoutsMs: Pair<Int, Int>,
         expectedPin: HostPin?
     ): HostPin
-    
+
     suspend fun authUsernameKey(username: String, privateKeyPem: ByteArray)
-    
+
+    suspend fun authUsernamePassword(username: String, password: String)
+
     fun exec(command: String, pty: Boolean = false): Flow<ByteString>
-    
+
     suspend fun waitExitCode(timeoutMs: Int?): Int
-    
+
     suspend fun cancel()
 }

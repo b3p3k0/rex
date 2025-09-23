@@ -23,6 +23,8 @@ interface KeyVault {
     suspend fun generateEd25519(): Pair<KeyBlobId, String>
     suspend fun deleteKey(id: KeyBlobId)
     suspend fun decryptPrivateKey(id: KeyBlobId): ByteArray
+    suspend fun getPublicKeyOpenssh(id: KeyBlobId): String
+    suspend fun validatePrivateKeyPem(pem: ByteArray): Boolean
 }
 
 @JvmInline

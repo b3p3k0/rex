@@ -18,6 +18,7 @@
 
 package dev.rex.app.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -36,6 +37,7 @@ fun AddHostScreen(
     onNavigateBack: () -> Unit,
     viewModel: AddHostViewModel = hiltViewModel()
 ) {
+    Log.i("Rex", "Screen: AddHostScreen")
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(

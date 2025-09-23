@@ -20,6 +20,8 @@ package dev.rex.app.data.crypto
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.UserNotAuthenticatedException
+import dev.rex.app.core.SecurityGateRequiredException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -58,7 +60,8 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .setUserAuthenticationRequired(false) // For now, will be updated for device credential flow
+            .setUserAuthenticationRequired(true)
+            .setUserAuthenticationValidityDurationSeconds(300)
             .build()
         
         keyGenerator.init(keyGenParameterSpec)
@@ -89,19 +92,23 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
     
     override suspend fun unwrapDek(wrapped: WrappedKey): ByteArray {
         ensureKeys()
-        
-        val secretKey = keyStore.getKey(KEK_ALIAS, null) as SecretKey
-        val cipher = Cipher.getInstance(AES_GCM_CIPHER)
-        val gcmSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, wrapped.iv)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec)
-        
-        // Reconstruct ciphertext with tag
-        val ciphertextWithTag = wrapped.ciphertext + wrapped.tag
-        val result = cipher.doFinal(ciphertextWithTag)
-        
-        // Zeroize the reconstructed ciphertext buffer
-        ciphertextWithTag.fill(0)
-        
-        return result
+
+        try {
+            val secretKey = keyStore.getKey(KEK_ALIAS, null) as SecretKey
+            val cipher = Cipher.getInstance(AES_GCM_CIPHER)
+            val gcmSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, wrapped.iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec)
+
+            // Reconstruct ciphertext with tag
+            val ciphertextWithTag = wrapped.ciphertext + wrapped.tag
+            val result = cipher.doFinal(ciphertextWithTag)
+
+            // Zeroize the reconstructed ciphertext buffer
+            ciphertextWithTag.fill(0)
+
+            return result
+        } catch (e: UserNotAuthenticatedException) {
+            throw SecurityGateRequiredException("Device authentication required to access encrypted keys")
+        }
     }
 }

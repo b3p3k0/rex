@@ -18,10 +18,12 @@
 
 package dev.rex.app.ui.screens
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.rex.app.core.GlobalCEH
 import dev.rex.app.data.db.HostEntity
 import dev.rex.app.data.repo.HostsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,7 +88,7 @@ class AddHostViewModel @Inject constructor(
 
         _uiState.value = currentState.copy(isLoading = true)
 
-        viewModelScope.launch {
+        viewModelScope.launch(GlobalCEH.handler) {
             try {
                 val host = HostEntity(
                     id = UUID.randomUUID().toString(),
@@ -104,7 +106,10 @@ class AddHostViewModel @Inject constructor(
                     updatedAt = System.currentTimeMillis()
                 )
                 
-                hostsRepository.insertHost(host)
+                val hostId = hostsRepository.insertHost(host)
+                Log.d("Rex", "inserted host id=$hostId")
+                
+                _uiState.value = _uiState.value.copy(isLoading = false)
                 onSuccess()
             } catch (e: Exception) {
                 _uiState.value = currentState.copy(

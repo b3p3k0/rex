@@ -44,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.15"
@@ -102,9 +103,18 @@ dependencies {
     // AndroidX Security Crypto
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // Biometric authentication
+    implementation("androidx.biometric:biometric:1.1.0")
+
+    // DataStore preferences
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // SSHJ
     implementation("com.hierynomus:sshj:0.38.0")
     implementation("org.slf4j:slf4j-nop:2.0.13")
+
+    // Ed25519 cryptography
+    implementation("net.i2p.crypto:eddsa:0.3.0")
 
     // OkIO for ByteString
     implementation("com.squareup.okio:okio:3.9.0")
@@ -116,6 +126,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     testImplementation("io.mockk:mockk:1.13.12")
+    testImplementation("net.i2p.crypto:eddsa:0.3.0")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.01"))

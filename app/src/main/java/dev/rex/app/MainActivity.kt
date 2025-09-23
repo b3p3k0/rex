@@ -19,31 +19,63 @@
 package dev.rex.app
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.util.Log
+import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import dev.rex.app.data.settings.SettingsStore
 import dev.rex.app.ui.navigation.RexNavigation
+import dev.rex.app.ui.screens.SettingsViewModel
 import dev.rex.app.ui.theme.RexTheme
+import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+
+    @Inject
+    lateinit var settingsStore: SettingsStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i("Rex", "MainActivity created")
         setContent {
             RexTheme {
+                // Apply screen capture protection based on settings
+                ApplyScreenProtection()
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     RexApp()
                 }
+            }
+        }
+    }
+
+    @Composable
+    private fun ApplyScreenProtection() {
+        val settingsViewModel: SettingsViewModel = hiltViewModel()
+        val settingsData by settingsViewModel.settingsData.collectAsStateWithLifecycle()
+
+        LaunchedEffect(settingsData.screenCaptureProtection) {
+            if (settingsData.screenCaptureProtection) {
+                window.setFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE,
+                    WindowManager.LayoutParams.FLAG_SECURE
+                )
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
         }
     }

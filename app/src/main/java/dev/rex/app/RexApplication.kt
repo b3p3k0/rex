@@ -19,7 +19,41 @@
 package dev.rex.app
 
 import android.app.Application
+import android.os.StrictMode
+import android.util.Log
 import dagger.hilt.android.HiltAndroidApp
+import dev.rex.app.core.SettingsInitializer
+import javax.inject.Inject
 
 @HiltAndroidApp
-class RexApplication : Application()
+class RexApplication : Application() {
+
+    @Inject
+    lateinit var settingsInitializer: SettingsInitializer
+
+    override fun onCreate() {
+        super.onCreate()
+
+        // Force injection and initialization
+        settingsInitializer.initialize()
+
+        Thread.setDefaultUncaughtExceptionHandler { _, e ->
+            Log.e("Rex", "Uncaught", e)
+        }
+        
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder()
+                    .detectAll()
+                    .penaltyLog()
+                    .build()
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectAll()
+                    .penaltyLog()
+                    .build()
+            )
+        }
+    }
+}

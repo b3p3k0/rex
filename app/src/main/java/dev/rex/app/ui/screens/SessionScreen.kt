@@ -18,6 +18,7 @@
 
 package dev.rex.app.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +44,7 @@ fun SessionScreen(
     onNavigateBack: () -> Unit,
     viewModel: SessionViewModel = hiltViewModel()
 ) {
+    Log.i("Rex", "Screen: SessionScreen")
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(

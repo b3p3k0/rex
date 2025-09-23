@@ -19,6 +19,7 @@
 package dev.rex.app.data.ssh
 
 import dev.rex.app.core.ErrorMapper
+import dev.rex.app.data.repo.HostsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import net.schmizz.sshj.SSHClient
@@ -34,7 +35,8 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 class SshjClient @Inject constructor(
-    private val hostKeyVerifier: HostKeyVerifier
+    private val hostKeyVerifier: HostKeyVerifier,
+    private val hostsRepository: HostsRepository
 ) : SshClient {
     
     private var sshClient: SSHClient? = null
@@ -56,9 +58,16 @@ class SshjClient @Inject constructor(
                 client.addHostKeyVerifier(object : net.schmizz.sshj.transport.verification.HostKeyVerifier {
                     override fun verify(hostname: String, port: Int, key: java.security.PublicKey): Boolean {
                         val actualPin = hostKeyVerifier.computeFingerprint(key.encoded)
-                        return hostKeyVerifier.verifyPinned(expectedPin, actualPin)
+                        val isValid = hostKeyVerifier.verifyPinned(expectedPin, actualPin)
+                        if (!isValid) {
+                            throw HostKeyMismatchException(
+                                "Host key mismatch for $hostname:$port. " +
+                                "Expected: ${expectedPin.sha256}, Got: ${actualPin.sha256}"
+                            )
+                        }
+                        return true
                     }
-                    
+
                     override fun findExistingAlgorithms(hostname: String, port: Int): MutableList<String> {
                         return mutableListOf()
                     }
@@ -70,10 +79,12 @@ class SshjClient @Inject constructor(
             
             client.connect(host, port)
             sshClient = client
-            
-            // Get the actual server host key for TOFU - simplified for now
-            // Real implementation would extract key from transport
-            return HostPin("ssh-rsa", "SHA256:deterministicHostKeyPlaceholder")
+
+            // Extract the actual server host key for TOFU - simplified for now
+            // Real implementation would extract key from SSH transport layer
+            val actualPin = HostPin("ssh-rsa", "SHA256:RealHostKeyPlaceholder")
+
+            return actualPin
             
         } catch (e: Exception) {
             val (error, message) = ErrorMapper.mapException(e)
@@ -83,20 +94,33 @@ class SshjClient @Inject constructor(
     
     override suspend fun authUsernameKey(username: String, privateKeyPem: ByteArray) {
         val client = sshClient ?: throw IllegalStateException("Not connected")
-        
+
         try {
             // Parse the PEM private key
             val keyProvider = client.loadKeys(String(privateKeyPem, Charsets.UTF_8))
-            
+
             // Authenticate using the private key
             client.authPublickey(username, keyProvider)
-            
+
         } catch (e: Exception) {
             val (error, message) = ErrorMapper.mapException(e)
             throw RuntimeException("SSH authentication failed: $message", e)
         } finally {
             // Zeroize the PEM data
             privateKeyPem.fill(0)
+        }
+    }
+
+    override suspend fun authUsernamePassword(username: String, password: String) {
+        val client = sshClient ?: throw IllegalStateException("Not connected")
+
+        try {
+            // Authenticate using username and password
+            client.authPassword(username, password)
+
+        } catch (e: Exception) {
+            val (error, message) = ErrorMapper.mapException(e)
+            throw RuntimeException("SSH password authentication failed: $message", e)
         }
     }
     

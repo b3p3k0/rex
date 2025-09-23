@@ -9,7 +9,6 @@
     <string name="action_close">Close</string>
     <string name="action_trust_and_pin">Trust &amp; Pin</string>
     <string name="action_add_host">Add host</string>
-    <string name="action_add_command">Add command</string>
     <string name="action_map_host_command">Map host ↔ command</string>
     
     <!-- Banners -->
@@ -24,6 +23,21 @@
     <string name="dialog_confirm_run_body">This will execute on %1$s:\n%2$s</string>
     <string name="dialog_tofu_title">First-time host</string>
     <string name="dialog_tofu_body">Verify and trust this host key?\nHost: %1$s\nAlgo: %2$s\nSHA256: %3$s</string>
+
+    <!-- About dialog -->
+    <string name="about_title">About Rex</string>
+    <string name="about_line1">Hi. I\'m Rex — a tiny, tidy SSH runner vibe-coded by ChatGPT5, Claude Sonnet 4, and Kev (HI).</string>
+    <string name="about_line2">"Yes, it\'s AI-made." Some call that "slop." We call that draft material. We polished it into something useful.</string>
+    <string name="about_repo_prefix">Repo · </string>
+    <string name="about_chat_prefix">Chat · </string>
+    <string name="about_github_label">GitHub</string>
+    <string name="about_github_url">https://github.com/b3p3k0/rex</string>
+    <string name="about_reddit_label">r/vibecoding</string>
+    <string name="about_reddit_url">https://www.reddit.com/r/vibecoding</string>
+    <string name="about_license">GPL-3.0.</string>
+    <string name="about_version_fmt">Version: %1$s (build %2$d)</string>
+    <string name="about_close">Close</string>
+    <string name="about_icon_cd">Open about dialog</string>
     
     <!-- Terminal -->
     <string name="terminal_copy_enabled_notice">Copied. Will clear in 60 seconds.</string>

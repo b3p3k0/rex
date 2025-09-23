@@ -20,6 +20,7 @@ package dev.rex.app.data.repo
 
 import dev.rex.app.data.db.HostCommandEntity
 import dev.rex.app.data.db.HostCommandMapping
+import dev.rex.app.data.db.HostCommandRow
 import dev.rex.app.data.db.HostCommandsDao
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -32,6 +33,10 @@ class HostCommandRepository @Inject constructor(
     
     fun getAllHostCommandMappings(): Flow<List<HostCommandMapping>> {
         return hostCommandsDao.getHostCommandMappings()
+    }
+    
+    fun observeHostCommandRows(): Flow<List<HostCommandRow>> {
+        return hostCommandsDao.observeHostCommandRows()
     }
     
     fun getHostCommandsByHostId(hostId: String): Flow<List<HostCommandEntity>> {
@@ -48,16 +53,11 @@ class HostCommandRepository @Inject constructor(
     
     suspend fun createMapping(hostId: String, commandId: String, sortIndex: Int = 0) {
         val mapping = HostCommandEntity(
-            id = generateId(),
             hostId = hostId,
             commandId = commandId,
             sortIndex = sortIndex,
             createdAt = System.currentTimeMillis()
         )
         insertHostCommand(mapping)
-    }
-    
-    private fun generateId(): String {
-        return java.util.UUID.randomUUID().toString()
     }
 }

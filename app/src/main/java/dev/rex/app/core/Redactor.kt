@@ -27,7 +27,8 @@ object Redactor {
     
     private val patterns = listOf(
         Regex("(?i)(password|passwd|pwd)\\s*=\\s*[^\\s]+"),
-        Regex("(?i)(token|apikey|api_key|secret|authorization)\\s*[:=]\\s*[^\\s]+"),
+        Regex("(?i)(token|apikey|api_key|secret)\\s*[:=]\\s*[^\\s]+"),
+        Regex("(?i)(?<=authorization\\s*:\\s*)bearer\\s+[a-z0-9\\.\\-_]+"),
         Regex("(?i)bearer\\s+[a-z0-9\\.\\-_]+"),
         Regex("\\b[0-9a-f]{32,}\\b")
     )

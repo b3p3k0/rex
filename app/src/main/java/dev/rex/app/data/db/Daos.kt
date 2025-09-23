@@ -19,6 +19,7 @@
 package dev.rex.app.data.db
 
 import androidx.room.*
+import androidx.room.OnConflictStrategy
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -29,7 +30,7 @@ interface HostsDao {
     @Query("SELECT * FROM hosts WHERE id = :id")
     suspend fun getHostById(id: String): HostEntity?
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertHost(host: HostEntity)
 
     @Update
@@ -37,6 +38,9 @@ interface HostsDao {
 
     @Delete
     suspend fun deleteHost(host: HostEntity)
+    
+    @Query("DELETE FROM hosts WHERE id = :hostId")
+    suspend fun deleteById(hostId: String): Int
 }
 
 @Dao
@@ -47,7 +51,7 @@ interface CommandsDao {
     @Query("SELECT * FROM commands WHERE id = :id")
     suspend fun getCommandById(id: String): CommandEntity?
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertCommand(command: CommandEntity)
 
     @Update
@@ -55,6 +59,9 @@ interface CommandsDao {
 
     @Delete
     suspend fun deleteCommand(command: CommandEntity)
+
+    @Query("DELETE FROM commands WHERE id = :commandId")
+    suspend fun deleteCommandById(commandId: String): Int
 }
 
 @Dao
@@ -66,11 +73,12 @@ interface HostCommandsDao {
     fun getHostCommandsByHostId(hostId: String): Flow<List<HostCommandEntity>>
 
     @Query("""
-        SELECT h.id, h.nickname, h.hostname, h.port, h.username, 
+        SELECT h.id, h.nickname, h.hostname, h.port, h.username,
                h.auth_method, h.key_blob_id, h.connect_timeout_ms, h.read_timeout_ms,
-               h.strict_host_key, h.pinned_host_key_fingerprint, h.created_at, h.updated_at,
+               h.strict_host_key, h.pinned_host_key_fingerprint, h.key_provisioned_at, h.key_provision_status,
+               h.created_at, h.updated_at,
                c.name, c.command, c.require_confirmation, c.default_timeout_ms, c.allow_pty,
-               hc.id as mapping_id, hc.sort_index
+               hc.host_id || '_' || hc.command_id as mapping_id, hc.sort_index
         FROM host_commands hc
         INNER JOIN hosts h ON hc.host_id = h.id
         INNER JOIN commands c ON hc.command_id = c.id
@@ -78,11 +86,45 @@ interface HostCommandsDao {
     """)
     fun getHostCommandMappings(): Flow<List<HostCommandMapping>>
 
-    @Insert
-    suspend fun insertHostCommand(hostCommand: HostCommandEntity)
+    @Query("""
+        SELECT h.id            AS hostId,
+               h.nickname      AS hostNickname,
+               h.hostname      AS hostName,
+               h.port          AS hostPort,
+               h.username      AS hostUser,
+               h.auth_method   AS hostAuthMethod,
+               h.key_blob_id   AS hostKeyBlobId,
+               h.connect_timeout_ms AS hostConnectTimeoutMs,
+               h.read_timeout_ms AS hostReadTimeoutMs,
+               h.strict_host_key AS hostStrictHostKey,
+               h.pinned_host_key_fingerprint AS hostPinnedHostKeyFingerprint,
+               h.key_provisioned_at AS hostKeyProvisionedAt,
+               h.key_provision_status AS hostKeyProvisionStatus,
+               h.created_at    AS hostCreatedAt,
+               h.updated_at    AS hostUpdatedAt,
+               c.id            AS cmdId,
+               c.name          AS cmdName,
+               c.command       AS cmdCommand,
+               c.require_confirmation AS cmdRequireConfirmation,
+               c.default_timeout_ms AS cmdDefaultTimeoutMs,
+               c.allow_pty     AS cmdAllowPty,
+               hc.host_id || '_' || hc.command_id AS mappingId,
+               hc.sort_index   AS sortIndex
+        FROM hosts h
+        LEFT JOIN host_commands hc ON hc.host_id = h.id
+        LEFT JOIN commands c       ON c.id = hc.command_id
+        ORDER BY h.nickname COLLATE NOCASE, c.name COLLATE NOCASE
+    """)
+    fun observeHostCommandRows(): Flow<List<HostCommandRow>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertHostCommand(hostCommand: HostCommandEntity): Long
 
     @Delete
     suspend fun deleteHostCommand(hostCommand: HostCommandEntity)
+    
+    @Query("DELETE FROM host_commands WHERE host_id = :hostId")
+    suspend fun deleteMappingsForHost(hostId: String)
 }
 
 @Dao
@@ -111,3 +153,22 @@ interface LogsDao {
     @Query("DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY ts DESC LIMIT :keepCount)")
     suspend fun deleteOldLogsByCount(keepCount: Int)
 }
+
+@Dao
+interface KeyProvisionLogsDao {
+    @Query("SELECT * FROM key_provision_logs WHERE host_id = :hostId ORDER BY ts DESC")
+    fun getProvisionLogsByHost(hostId: String): Flow<List<KeyProvisionLogEntity>>
+
+    @Query("SELECT * FROM key_provision_logs WHERE key_blob_id = :keyBlobId ORDER BY ts DESC")
+    fun getProvisionLogsByKey(keyBlobId: String): Flow<List<KeyProvisionLogEntity>>
+
+    @Query("SELECT * FROM key_provision_logs ORDER BY ts DESC LIMIT :limit")
+    fun getRecentProvisionLogs(limit: Int): Flow<List<KeyProvisionLogEntity>>
+
+    @Insert
+    suspend fun insertProvisionLog(log: KeyProvisionLogEntity)
+
+    @Query("DELETE FROM key_provision_logs WHERE id NOT IN (SELECT id FROM key_provision_logs ORDER BY ts DESC LIMIT :keepCount)")
+    suspend fun deleteOldProvisionLogsByCount(keepCount: Int)
+}
+

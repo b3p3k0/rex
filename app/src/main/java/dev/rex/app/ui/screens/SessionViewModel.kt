@@ -26,7 +26,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.rex.app.core.DangerousCommandValidator
+import dev.rex.app.core.Gatekeeper
+import dev.rex.app.core.GlobalCEH
 import dev.rex.app.core.Redactor
+import dev.rex.app.data.settings.SettingsStore
 import dev.rex.app.data.ssh.SshClient
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -48,7 +52,10 @@ data class SessionUiState(
 class SessionViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sshClient: SshClient,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val gatekeeper: Gatekeeper,
+    private val settingsStore: SettingsStore,
+    private val dangerousCommandValidator: DangerousCommandValidator
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SessionUiState())
@@ -73,8 +80,17 @@ class SessionViewModel @Inject constructor(
         rawOutput.clear()
         startTimer()
 
-        executionJob = viewModelScope.launch {
+        executionJob = viewModelScope.launch(GlobalCEH.handler) {
             try {
+                // Check if command is dangerous and require gate
+                if (dangerousCommandValidator.isDangerous(command)) {
+                    gatekeeper.requireGateForDangerousCommand()
+                }
+
+                // TODO: Add TOFU trust gating when host key verification is integrated
+                // if (needsTofuTrust(hostname)) {
+                //     gatekeeper.requireGateForTofuTrust()
+                // }
                 sshClient.exec(command, pty).collect { byteString ->
                     val text = byteString.utf8()
                     rawOutput.append(text)
@@ -90,10 +106,11 @@ class SessionViewModel @Inject constructor(
                 // Wait for exit code
                 val exitCode = sshClient.waitExitCode(30000) // 30 second timeout
                 
+                val allowCopy = settingsStore.allowCopyOutput.first()
                 _uiState.value = _uiState.value.copy(
                     isRunning = false,
                     exitCode = exitCode,
-                    canCopy = true // Allow copying after completion
+                    canCopy = allowCopy
                 )
 
             } catch (e: Exception) {
@@ -104,50 +121,67 @@ class SessionViewModel @Inject constructor(
                 )
             } finally {
                 stopTimer()
+                // Clear sensitive data from memory
+                rawOutput.clear()
             }
         }
     }
 
     fun cancelExecution() {
         executionJob?.cancel()
-        viewModelScope.launch {
+        viewModelScope.launch(GlobalCEH.handler) {
             try {
                 sshClient.cancel()
             } catch (e: Exception) {
                 // Ignore cancel errors
             }
+            val allowCopy = settingsStore.allowCopyOutput.first()
             _uiState.value = _uiState.value.copy(
                 isRunning = false,
-                canCopy = true
+                canCopy = allowCopy
             )
             stopTimer()
+            // Clear sensitive data from memory
+            rawOutput.clear()
         }
     }
 
     fun copyOutput() {
-        val output = _uiState.value.output
-        if (output.isBlank()) return
+        viewModelScope.launch(GlobalCEH.handler) {
+            val allowCopy = settingsStore.allowCopyOutput.first()
+            if (!allowCopy) return@launch
 
-        val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clipData = ClipData.newPlainText("Rex Output", output)
-        clipboardManager.setPrimaryClip(clipData)
+            val output = _uiState.value.output
+            if (output.isBlank()) return@launch
 
-        // Auto-clear clipboard after 60 seconds per SPEC requirements
-        clipboardClearJob?.cancel()
-        clipboardClearJob = viewModelScope.launch {
-            delay(60_000) // 60 seconds
-            try {
-                val emptyClip = ClipData.newPlainText("", "")
-                clipboardManager.setPrimaryClip(emptyClip)
-            } catch (e: Exception) {
-                // Ignore clipboard clear errors
+            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clipData = ClipData.newPlainText("Rex Output", output).apply {
+                // Add FLAG_SENSITIVE for Android 13+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    description.extras = android.os.PersistableBundle().apply {
+                        putBoolean("android.content.extra.IS_SENSITIVE", true)
+                    }
+                }
+            }
+            clipboardManager.setPrimaryClip(clipData)
+
+            // Auto-clear clipboard after 60 seconds per SPEC requirements
+            clipboardClearJob?.cancel()
+            clipboardClearJob = viewModelScope.launch(GlobalCEH.handler) {
+                delay(60_000) // 60 seconds
+                try {
+                    val emptyClip = ClipData.newPlainText("", "")
+                    clipboardManager.setPrimaryClip(emptyClip)
+                } catch (e: Exception) {
+                    // Ignore clipboard clear errors
+                }
             }
         }
     }
 
     private fun startTimer() {
         val startTime = System.currentTimeMillis()
-        timerJob = viewModelScope.launch {
+        timerJob = viewModelScope.launch(GlobalCEH.handler) {
             while (_uiState.value.isRunning) {
                 val elapsed = System.currentTimeMillis() - startTime
                 _uiState.value = _uiState.value.copy(elapsedTimeMs = elapsed)
@@ -166,14 +200,25 @@ class SessionViewModel @Inject constructor(
         executionJob?.cancel()
         timerJob?.cancel()
         clipboardClearJob?.cancel()
-        
+
+        // Clear sensitive data from memory
+        rawOutput.clear()
+
         // Clean up SSH client
-        viewModelScope.launch {
+        viewModelScope.launch(GlobalCEH.handler) {
             try {
                 sshClient.close()
             } catch (e: Exception) {
                 // Ignore cleanup errors
             }
         }
+    }
+
+    fun isDangerous(command: String): Boolean {
+        return dangerousCommandValidator.isDangerous(command)
+    }
+
+    fun getDangerReason(command: String): String {
+        return dangerousCommandValidator.getDangerReason(command) ?: "Unknown danger"
     }
 }

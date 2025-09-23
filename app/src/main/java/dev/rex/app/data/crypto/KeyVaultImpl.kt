@@ -20,7 +20,16 @@ package dev.rex.app.data.crypto
 
 import dev.rex.app.data.db.KeyBlobEntity
 import dev.rex.app.data.repo.KeysRepository
+import net.i2p.crypto.eddsa.EdDSAPrivateKey
+import net.i2p.crypto.eddsa.EdDSAPublicKey
+import net.i2p.crypto.eddsa.KeyPairGenerator
+import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable
+import net.i2p.crypto.eddsa.spec.EdDSAParameterSpec
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.security.KeyPair
 import java.security.SecureRandom
+import java.util.Base64
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
@@ -63,9 +72,52 @@ class KeyVaultImpl @Inject constructor(
     }
     
     override suspend fun generateEd25519(): Pair<KeyBlobId, String> {
-        // For now, this is a placeholder. Real implementation would use
-        // BouncyCastle or similar to generate Ed25519 keys
-        TODO("Ed25519 key generation not yet implemented")
+        val keyBlobId = KeyBlobId(UUID.randomUUID().toString())
+
+        // Generate Ed25519 keypair
+        val spec: EdDSAParameterSpec = EdDSANamedCurveTable.getByName("Ed25519")
+        val keyPairGenerator = KeyPairGenerator()
+        keyPairGenerator.initialize(spec, SecureRandom())
+        val keyPair: KeyPair = keyPairGenerator.generateKeyPair()
+
+        val privateKey = keyPair.private as EdDSAPrivateKey
+        val publicKey = keyPair.public as EdDSAPublicKey
+
+        var privateKeyPem: ByteArray? = null
+        var opensshPublicKey: String
+
+        try {
+            // Convert private key to PKCS#8 PEM format
+            val privateKeyDer = privateKey.encoded
+            privateKeyPem = toPkcs8Pem(privateKeyDer)
+
+            // Build OpenSSH public key format
+            opensshPublicKey = buildOpenSshPublicKey(publicKey.abyte)
+
+            // Encrypt the PEM bytes
+            val (encryptedBlob, wrappedDek) = encryptWithNewDek(privateKeyPem)
+
+            val keyBlobEntity = KeyBlobEntity(
+                id = keyBlobId.id,
+                alg = "ed25519",
+                encBlob = encryptedBlob.ciphertext,
+                encBlobIv = encryptedBlob.iv,
+                encBlobTag = encryptedBlob.tag,
+                wrappedDekIv = wrappedDek.iv,
+                wrappedDekTag = wrappedDek.tag,
+                wrappedDekCiphertext = wrappedDek.ciphertext,
+                publicKeyOpenssh = opensshPublicKey,
+                createdAt = System.currentTimeMillis()
+            )
+
+            keysRepository.insertKeyBlob(keyBlobEntity)
+            return Pair(keyBlobId, opensshPublicKey)
+
+        } finally {
+            // Zeroize sensitive material
+            privateKeyPem?.fill(0)
+            privateKey.encoded?.fill(0)
+        }
     }
     
     override suspend fun deleteKey(id: KeyBlobId) {
@@ -78,11 +130,27 @@ class KeyVaultImpl @Inject constructor(
     override suspend fun decryptPrivateKey(id: KeyBlobId): ByteArray {
         val keyBlob = keysRepository.getKeyBlobById(id.id)
             ?: throw IllegalArgumentException("Key blob not found: ${id.id}")
-        
+
         return decryptWithDek(
             encryptedData = WrappedKey(keyBlob.encBlobIv, keyBlob.encBlobTag, keyBlob.encBlob),
             wrappedDek = WrappedKey(keyBlob.wrappedDekIv, keyBlob.wrappedDekTag, keyBlob.wrappedDekCiphertext)
         )
+    }
+
+    override suspend fun getPublicKeyOpenssh(id: KeyBlobId): String {
+        val keyBlob = keysRepository.getKeyBlobById(id.id)
+            ?: throw IllegalArgumentException("Key blob not found: ${id.id}")
+
+        return keyBlob.publicKeyOpenssh
+    }
+
+    override suspend fun validatePrivateKeyPem(pem: ByteArray): Boolean {
+        return try {
+            extractPublicKeyFromPem(pem)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
     
     private suspend fun encryptWithNewDek(plaintext: ByteArray): Pair<WrappedKey, WrappedKey> {
@@ -162,5 +230,36 @@ class KeyVaultImpl @Inject constructor(
         }
         
         throw IllegalArgumentException("Invalid PEM format")
+    }
+
+    private fun toPkcs8Pem(derBytes: ByteArray): ByteArray {
+        val base64 = Base64.getEncoder().encodeToString(derBytes)
+        val chunked = base64.chunked(64).joinToString("\n")
+        val pem = "-----BEGIN PRIVATE KEY-----\n$chunked\n-----END PRIVATE KEY-----\n"
+        return pem.toByteArray(Charsets.UTF_8)
+    }
+
+    private fun buildOpenSshPublicKey(publicKeyBytes: ByteArray): String {
+        val keyType = "ssh-ed25519"
+        val buffer = ByteArrayOutputStream()
+
+        // Write SSH wire format: length-prefixed strings
+        writeString(buffer, keyType)
+        writeString(buffer, publicKeyBytes)
+
+        val sshBlob = buffer.toByteArray()
+        val base64Blob = Base64.getEncoder().encodeToString(sshBlob)
+
+        return "$keyType $base64Blob rex@android"
+    }
+
+    private fun writeString(buffer: ByteArrayOutputStream, data: String) {
+        writeString(buffer, data.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun writeString(buffer: ByteArrayOutputStream, data: ByteArray) {
+        val lengthBytes = ByteBuffer.allocate(4).putInt(data.size).array()
+        buffer.write(lengthBytes)
+        buffer.write(data)
     }
 }
