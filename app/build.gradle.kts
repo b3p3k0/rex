@@ -23,6 +23,27 @@ android {
         }
     }
 
+    val releaseSigningConfigured = signingConfigs.create("release").run {
+        val keystorePath = project.findProperty("REX_RELEASE_KEYSTORE")?.toString()
+        val keystorePassword = project.findProperty("REX_RELEASE_KEYSTORE_PASSWORD")?.toString()
+        val keyAlias = project.findProperty("REX_RELEASE_KEY_ALIAS")?.toString()
+        val keyPassword = project.findProperty("REX_RELEASE_KEY_PASSWORD")?.toString()
+
+        val hasAllCredentials = listOf(keystorePath, keystorePassword, keyAlias, keyPassword)
+            .all { !it.isNullOrBlank() }
+
+        if (hasAllCredentials && keystorePath != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
+            storeFile = file(keystorePath)
+            storePassword = keystorePassword
+            this.keyAlias = keyAlias
+            this.keyPassword = keyPassword
+        } else {
+            println("Warning: Release signing properties are missing; release APK will remain unsigned.")
+        }
+
+        hasAllCredentials
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -30,6 +51,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isMinifyEnabled = false

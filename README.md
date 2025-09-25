@@ -7,6 +7,8 @@ Android app to store hosts and commands, run them over SSH, and stream output. S
 - **Secure SSH execution**: Store hosts and commands, execute over SSH with streaming output
 - **Host key pinning**: TOFU (Trust On First Use) with SHA256 fingerprint verification
 - **Encrypted storage**: Private keys encrypted with Android Keystore (non-exportable KEK)
+- **Execution logs**: View command history with filtering by host, status, and search
+- **Retention management**: Configurable log eviction policies (count/age/size) with manual purge
 - **Minimal logging**: Metadata-only logs with automatic redaction and FIFO eviction
 - **Material Design 3**: Modern Android UI with accessibility support
 - **Device security**: PIN/passcode unlock, FLAG_SECURE on sensitive screens

@@ -152,6 +152,15 @@ interface LogsDao {
 
     @Query("DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY ts DESC LIMIT :keepCount)")
     suspend fun deleteOldLogsByCount(keepCount: Int)
+
+    @Query("DELETE FROM logs WHERE ts < :cutoffTimestamp")
+    suspend fun deleteOldLogsByAge(cutoffTimestamp: Long)
+
+    @Query("SELECT id, (bytes_stdout + bytes_stderr) as total_bytes FROM logs ORDER BY ts DESC")
+    suspend fun getLogsSizeInfo(): List<LogSizeInfo>
+
+    @Query("DELETE FROM logs WHERE id IN (:idsToDelete)")
+    suspend fun deleteLogsByIds(idsToDelete: List<String>)
 }
 
 @Dao

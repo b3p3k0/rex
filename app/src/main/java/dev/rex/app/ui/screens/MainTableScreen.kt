@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,6 +53,7 @@ fun MainTableScreen(
     onNavigateToAddCommand: (String) -> Unit,
     onNavigateToEditCommand: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToLogs: () -> Unit,
     onNavigateToHostDetail: (String) -> Unit,
     onExecuteCommand: (HostCommandMapping) -> Unit,
     viewModel: MainTableViewModel = hiltViewModel()
@@ -61,6 +63,7 @@ fun MainTableScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var showAbout by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
     
     // Group by host to avoid duplicate host entries
     val groupedByHost = remember(hostCommandRows) {
@@ -84,8 +87,6 @@ fun MainTableScreen(
                         Icon(Icons.Filled.HelpOutline, contentDescription = "Open about dialog")
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
-
                     IconButton(
                         onClick = onNavigateToSettings,
                         modifier = Modifier.semantics {
@@ -93,6 +94,30 @@ fun MainTableScreen(
                         }
                     ) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
+
+                    Box {
+                        IconButton(
+                            onClick = { showOverflowMenu = true },
+                            modifier = Modifier.semantics {
+                                contentDescription = "More options"
+                            }
+                        ) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                        }
+
+                        DropdownMenu(
+                            expanded = showOverflowMenu,
+                            onDismissRequest = { showOverflowMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Logs") },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    onNavigateToLogs()
+                                }
+                            )
+                        }
                     }
                 }
             )

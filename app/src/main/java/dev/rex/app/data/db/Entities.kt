@@ -195,6 +195,11 @@ data class LogEntity(
     @ColumnInfo(name = "idx_seq") val idxSeq: Long
 )
 
+data class LogSizeInfo(
+    val id: String,
+    val total_bytes: Int
+)
+
 @Entity(
     tableName = "key_provision_logs",
     foreignKeys = [

@@ -19,6 +19,7 @@
 package dev.rex.app.data.repo
 
 import dev.rex.app.data.db.LogEntity
+import dev.rex.app.data.db.LogSizeInfo
 import dev.rex.app.data.db.LogsDao
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -36,4 +37,33 @@ class LogsRepository @Inject constructor(
     suspend fun insertLog(log: LogEntity) = logsDao.insertLog(log)
     
     suspend fun deleteOldLogsByCount(keepCount: Int) = logsDao.deleteOldLogsByCount(keepCount)
+
+    suspend fun deleteOldLogsByAge(maxAgeDays: Int) {
+        val cutoffTimestamp = System.currentTimeMillis() - (maxAgeDays * 24 * 60 * 60 * 1000L)
+        logsDao.deleteOldLogsByAge(cutoffTimestamp)
+    }
+
+    suspend fun deleteOldLogsBySize(maxBytes: Long) {
+        val logSizeInfo = logsDao.getLogsSizeInfo()
+        var currentSize = 0L
+        val idsToKeep = mutableListOf<String>()
+
+        // Keep logs from newest to oldest until we exceed the size limit
+        for (logInfo in logSizeInfo) {
+            if (currentSize + logInfo.total_bytes <= maxBytes) {
+                currentSize += logInfo.total_bytes
+                idsToKeep.add(logInfo.id)
+            } else {
+                break
+            }
+        }
+
+        // If we have logs to delete, delete them
+        val allIds = logSizeInfo.map { it.id }
+        val idsToDelete = allIds - idsToKeep.toSet()
+
+        if (idsToDelete.isNotEmpty()) {
+            logsDao.deleteLogsByIds(idsToDelete)
+        }
+    }
 }

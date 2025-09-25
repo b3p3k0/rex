@@ -26,6 +26,7 @@ import dev.rex.app.ui.screens.AddCommandScreen
 import dev.rex.app.ui.screens.AddHostScreen
 import dev.rex.app.ui.screens.EditCommandScreen
 import dev.rex.app.ui.screens.HostDetailScreen
+import dev.rex.app.ui.screens.LogsScreen
 import dev.rex.app.ui.screens.MainTableScreen
 import dev.rex.app.ui.screens.SessionScreen
 import dev.rex.app.ui.screens.SettingsScreen
@@ -38,6 +39,7 @@ object RexDestinations {
     const val COMMAND_EDIT_EXISTING = "command_edit_existing"
     const val SESSION = "session"
     const val SETTINGS = "settings"
+    const val LOGS = "logs"
 }
 
 @Composable
@@ -61,6 +63,9 @@ fun RexNavigation(
                 },
                 onNavigateToSettings = {
                     navController.navigate(RexDestinations.SETTINGS)
+                },
+                onNavigateToLogs = {
+                    navController.navigate(RexDestinations.LOGS)
                 },
                 onNavigateToHostDetail = { hostId ->
                     navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId")
@@ -125,6 +130,14 @@ fun RexNavigation(
 
         composable(RexDestinations.SETTINGS) {
             SettingsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(RexDestinations.LOGS) {
+            LogsScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }
