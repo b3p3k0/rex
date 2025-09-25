@@ -48,7 +48,8 @@ class SettingsViewModel @Inject constructor(
                 defaultCommandTimeoutSeconds = SettingsStore.DEFAULT_COMMAND_TIMEOUT_SECONDS,
                 logRetentionCount = SettingsStore.DEFAULT_LOG_RETENTION_COUNT,
                 logRetentionAgeDays = SettingsStore.DEFAULT_LOG_RETENTION_AGE_DAYS,
-                logRetentionSizeMb = SettingsStore.DEFAULT_LOG_RETENTION_SIZE_MB
+                logRetentionSizeMb = SettingsStore.DEFAULT_LOG_RETENTION_SIZE_MB,
+                hapticFeedbackLongPress = SettingsStore.DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS
             )
         )
 
@@ -93,6 +94,12 @@ class SettingsViewModel @Inject constructor(
     fun setLogRetentionSizeMb(sizeMb: Int) {
         viewModelScope.launch(GlobalCEH.handler) {
             settingsStore.setLogRetentionSizeMb(sizeMb)
+        }
+    }
+
+    fun setHapticFeedbackLongPress(enabled: Boolean) {
+        viewModelScope.launch(GlobalCEH.handler) {
+            settingsStore.setHapticFeedbackLongPress(enabled)
         }
     }
 }

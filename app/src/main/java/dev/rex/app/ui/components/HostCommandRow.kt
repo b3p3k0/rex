@@ -18,91 +18,117 @@
 
 package dev.rex.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.rex.app.data.db.HostCommandMapping
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HostCommandRow(
     hostCommand: HostCommandMapping,
     onExecute: (HostCommandMapping) -> Unit,
     onEdit: (String) -> Unit = {},
     onDelete: (String) -> Unit = {},
+    enableHapticFeedback: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showActionsDialog by remember { mutableStateOf(false) }
+    val hapticFeedback = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .semantics { 
-                contentDescription = "Host command: ${hostCommand.nickname} ${hostCommand.name}" 
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = { onExecute(hostCommand) },
+                onLongClick = {
+                    if (enableHapticFeedback) {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+                    showActionsDialog = true
+                }
+            )
+            .semantics {
+                role = Role.Button
+                contentDescription = "Host command: ${hostCommand.nickname} ${hostCommand.name}. Tap to execute, long press for options."
             }
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "${hostCommand.nickname} • ${hostCommand.name}",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Text(
-                    text = hostCommand.hostname,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { onEdit(hostCommand.mappingId) },
-                    modifier = Modifier.semantics {
-                        contentDescription = "Edit ${hostCommand.name}"
-                    }
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit")
-                }
-
-                IconButton(
-                    onClick = { showDeleteConfirm = true },
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    modifier = Modifier.semantics {
-                        contentDescription = "Delete ${hostCommand.name}"
-                    }
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete")
-                }
-
-                Button(
-                    onClick = { onExecute(hostCommand) },
-                    modifier = Modifier.semantics {
-                        contentDescription = "Run ${hostCommand.name} on ${hostCommand.nickname}"
-                    }
-                ) {
-                    Text("Run")
-                }
-            }
+            Text(
+                text = "${hostCommand.nickname} • ${hostCommand.name}",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = hostCommand.hostname,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+    }
+
+    // Long-press actions dialog
+    if (showActionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showActionsDialog = false },
+            title = { Text("Command Actions") },
+            text = {
+                Text("Choose an action for \"${hostCommand.name}\" on ${hostCommand.nickname}:")
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            showActionsDialog = false
+                            onEdit(hostCommand.mappingId)
+                        }
+                    ) {
+                        Text("Edit")
+                    }
+
+                    TextButton(
+                        onClick = {
+                            showActionsDialog = false
+                            showDeleteConfirm = true
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Delete")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showActionsDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showDeleteConfirm) {

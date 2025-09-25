@@ -64,6 +64,10 @@ fun MainTableScreen(
     val coroutineScope = rememberCoroutineScope()
     var showAbout by remember { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }
+
+    // Get haptic feedback setting from SettingsViewModel
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val settingsData by settingsViewModel.settingsData.collectAsStateWithLifecycle()
     
     // Group by host to avoid duplicate host entries
     val groupedByHost = remember(hostCommandRows) {
@@ -200,7 +204,8 @@ fun MainTableScreen(
                                             duration = SnackbarDuration.Short
                                         )
                                     }
-                                }
+                                },
+                                enableHapticFeedback = settingsData.hapticFeedbackLongPress
                             )
                         }
                     }
@@ -224,7 +229,8 @@ private fun HostRowItem(
     onNavigateToEditCommand: (String) -> Unit,
     onNavigateToHostDetail: (String) -> Unit,
     onDeleteCommand: (String) -> Unit,
-    onDeleteHost: () -> Unit
+    onDeleteHost: () -> Unit,
+    enableHapticFeedback: Boolean = true
 ) {
     Log.d("Rex", "HostRowItem: ${hostRow.hostNickname} with ${commands.size} commands")
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -297,7 +303,8 @@ private fun HostRowItem(
                             // Extract command ID from mappingId format: hostId_commandId
                             val commandId = mappingId.substringAfter("_")
                             onDeleteCommand(commandId)
-                        }
+                        },
+                        enableHapticFeedback = enableHapticFeedback
                     )
                     if (command != commands.last()) {
                         Spacer(modifier = Modifier.height(4.dp))

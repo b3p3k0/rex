@@ -93,6 +93,13 @@ fun SettingsScreen(
                         onCheckedChange = viewModel::setAllowCopyOutput
                     )
 
+                    SettingSwitch(
+                        title = "Haptic Feedback on Long Press",
+                        subtitle = "Vibrate when long-pressing command cards",
+                        checked = settingsData.hapticFeedbackLongPress,
+                        onCheckedChange = viewModel::setHapticFeedbackLongPress
+                    )
+
                     SettingSlider(
                         title = "Credential Gate TTL",
                         subtitle = "Minutes before re-authentication required",

@@ -48,6 +48,7 @@ class SettingsStore @Inject constructor(
         private val LOG_RETENTION_COUNT = intPreferencesKey("log_retention_count")
         private val LOG_RETENTION_AGE_DAYS = intPreferencesKey("log_retention_age_days")
         private val LOG_RETENTION_SIZE_MB = intPreferencesKey("log_retention_size_mb")
+        private val HAPTIC_FEEDBACK_LONG_PRESS = booleanPreferencesKey("haptic_feedback_long_press")
 
         // Default values
         const val DEFAULT_SCREEN_CAPTURE_PROTECTION = true
@@ -57,6 +58,7 @@ class SettingsStore @Inject constructor(
         const val DEFAULT_LOG_RETENTION_COUNT = 1000
         const val DEFAULT_LOG_RETENTION_AGE_DAYS = 30
         const val DEFAULT_LOG_RETENTION_SIZE_MB = 50
+        const val DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS = true
     }
 
     /**
@@ -163,6 +165,20 @@ class SettingsStore @Inject constructor(
     }
 
     /**
+     * Haptic feedback on long press setting
+     */
+    val hapticFeedbackLongPress: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[HAPTIC_FEEDBACK_LONG_PRESS] ?: DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS
+        }
+
+    suspend fun setHapticFeedbackLongPress(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[HAPTIC_FEEDBACK_LONG_PRESS] = enabled
+        }
+    }
+
+    /**
      * Get all settings as a data class for easier access
      */
     val allSettings: Flow<SettingsData> = context.dataStore.data
@@ -174,7 +190,8 @@ class SettingsStore @Inject constructor(
                 defaultCommandTimeoutSeconds = preferences[DEFAULT_COMMAND_TIMEOUT_SECONDS_KEY] ?: DEFAULT_COMMAND_TIMEOUT_SECONDS,
                 logRetentionCount = preferences[LOG_RETENTION_COUNT] ?: DEFAULT_LOG_RETENTION_COUNT,
                 logRetentionAgeDays = preferences[LOG_RETENTION_AGE_DAYS] ?: DEFAULT_LOG_RETENTION_AGE_DAYS,
-                logRetentionSizeMb = preferences[LOG_RETENTION_SIZE_MB] ?: DEFAULT_LOG_RETENTION_SIZE_MB
+                logRetentionSizeMb = preferences[LOG_RETENTION_SIZE_MB] ?: DEFAULT_LOG_RETENTION_SIZE_MB,
+                hapticFeedbackLongPress = preferences[HAPTIC_FEEDBACK_LONG_PRESS] ?: DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS
             )
         }
 }
@@ -189,5 +206,6 @@ data class SettingsData(
     val defaultCommandTimeoutSeconds: Int,
     val logRetentionCount: Int,
     val logRetentionAgeDays: Int,
-    val logRetentionSizeMb: Int
+    val logRetentionSizeMb: Int,
+    val hapticFeedbackLongPress: Boolean
 )
