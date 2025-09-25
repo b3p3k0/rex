@@ -82,7 +82,7 @@ class AddHostViewModel @Inject constructor(
         )
     }
 
-    fun saveHost(onSuccess: () -> Unit) {
+    fun saveHost(onSuccess: (String) -> Unit) {
         val currentState = _uiState.value
         if (!currentState.canSave) return
 
@@ -108,9 +108,9 @@ class AddHostViewModel @Inject constructor(
                 
                 val hostId = hostsRepository.insertHost(host)
                 Log.d("Rex", "inserted host id=$hostId")
-                
+
                 _uiState.value = _uiState.value.copy(isLoading = false)
-                onSuccess()
+                onSuccess(host.id)
             } catch (e: Exception) {
                 _uiState.value = currentState.copy(
                     isLoading = false,

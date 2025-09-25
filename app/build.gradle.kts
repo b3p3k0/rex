@@ -135,7 +135,8 @@ dependencies {
 
     // SSHJ
     implementation("com.hierynomus:sshj:0.38.0")
-    implementation("org.slf4j:slf4j-nop:2.0.13")
+    implementation("org.slf4j:slf4j-android:1.7.36")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
     // Ed25519 cryptography
     implementation("net.i2p.crypto:eddsa:0.3.0")

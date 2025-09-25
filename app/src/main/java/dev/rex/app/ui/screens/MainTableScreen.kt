@@ -64,10 +64,32 @@ fun MainTableScreen(
     val coroutineScope = rememberCoroutineScope()
     var showAbout by remember { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }
+    var blockedHost by remember { mutableStateOf<HostCommandRow?>(null) }
+    var blockedCommand by remember { mutableStateOf<HostCommandMapping?>(null) }
 
     // Get haptic feedback setting from SettingsViewModel
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val settingsData by settingsViewModel.settingsData.collectAsStateWithLifecycle()
+    
+    fun clearBlockedState() {
+        blockedHost = null
+        blockedCommand = null
+    }
+
+    val handleExecuteCommand = remember(onExecuteCommand) {
+        { hostRow: HostCommandRow, command: HostCommandMapping ->
+            val requiresKey = hostRow.hostAuthMethod.equals("key", ignoreCase = true)
+            val keyProvisioned = !hostRow.hostKeyBlobId.isNullOrBlank() &&
+                hostRow.hostKeyProvisionStatus.equals("success", ignoreCase = true)
+
+            if (requiresKey && !keyProvisioned) {
+                blockedHost = hostRow
+                blockedCommand = command
+            } else {
+                onExecuteCommand(command)
+            }
+        }
+    }
     
     // Group by host to avoid duplicate host entries
     val groupedByHost = remember(hostCommandRows) {
@@ -188,7 +210,7 @@ fun MainTableScreen(
                                         )
                                     } else null
                                 },
-                                onExecuteCommand = onExecuteCommand,
+                                onExecuteCommand = { command -> handleExecuteCommand(hostRow, command) },
                                 onNavigateToAddCommand = onNavigateToAddCommand,
                                 onNavigateToEditCommand = onNavigateToEditCommand,
                                 onNavigateToHostDetail = onNavigateToHostDetail,
@@ -217,6 +239,43 @@ fun MainTableScreen(
     // Show About dialog when requested
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
+    }
+
+    blockedHost?.let { hostRow ->
+        val pendingCommand = blockedCommand
+        AlertDialog(
+            onDismissRequest = { clearBlockedState() },
+            title = { Text("Key required before running") },
+            text = {
+                Text(
+                    text = "${hostRow.hostNickname} uses key-based authentication but doesn't have a deployed key yet. Add or deploy a key before running commands.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pendingCommand?.let { command ->
+                        TextButton(onClick = {
+                            clearBlockedState()
+                            onExecuteCommand(command)
+                        }) {
+                            Text("Run anyway")
+                        }
+                    }
+                    TextButton(onClick = {
+                        clearBlockedState()
+                        onNavigateToHostDetail(hostRow.hostId)
+                    }) {
+                        Text("Manage keys")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearBlockedState() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -381,4 +440,3 @@ private fun EmptyState(
         )
     }
 }
-

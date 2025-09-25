@@ -22,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import dev.rex.app.ui.screens.AddCommandScreen
 import dev.rex.app.ui.screens.AddHostScreen
 import dev.rex.app.ui.screens.EditCommandScreen
@@ -81,14 +83,29 @@ fun RexNavigation(
             AddHostScreen(
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onHostCreated = { hostId ->
+                    navController.popBackStack()
+                    navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId?autoKeyOnboarding=true")
                 }
             )
         }
 
-        composable("${RexDestinations.HOST_DETAIL}/{hostId}") { backStackEntry ->
+        composable(
+            "${RexDestinations.HOST_DETAIL}/{hostId}?autoKeyOnboarding={autoKeyOnboarding}",
+            arguments = listOf(
+                navArgument("hostId") { type = NavType.StringType },
+                navArgument("autoKeyOnboarding") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { backStackEntry ->
             val hostId = backStackEntry.arguments?.getString("hostId") ?: ""
+            val autoKeyOnboarding = backStackEntry.arguments?.getBoolean("autoKeyOnboarding") ?: false
             HostDetailScreen(
                 hostId = hostId,
+                autoKeyOnboarding = autoKeyOnboarding,
                 onNavigateBack = {
                     navController.popBackStack()
                 }

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -51,10 +52,15 @@ interface SecurityManagerEntryPoint {
     fun securityManager(): SecurityManager
 }
 
+private enum class AutoKeyOnboardingStage {
+    Idle, LaunchGenerate, AwaitKey, LaunchDeploy, Finished
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HostDetailScreen(
     hostId: String,
+    autoKeyOnboarding: Boolean = false,
     onNavigateBack: () -> Unit,
     viewModel: HostDetailViewModel = hiltViewModel()
 ) {
@@ -71,6 +77,45 @@ fun HostDetailScreen(
     }
 
     var passwordText by remember { mutableStateOf("") }
+
+    // Auto key onboarding state machine
+    var onboardingStage by rememberSaveable { mutableStateOf(AutoKeyOnboardingStage.Idle) }
+
+    // Auto key onboarding logic
+    LaunchedEffect(autoKeyOnboarding, uiState.host, uiState.keyStatus, uiState.snackbarMessage) {
+        if (!autoKeyOnboarding) return@LaunchedEffect
+        val host = uiState.host ?: return@LaunchedEffect
+
+        when (onboardingStage) {
+            AutoKeyOnboardingStage.Idle -> {
+                // Only start if no key exists
+                if (host.keyBlobId == null) {
+                    onboardingStage = AutoKeyOnboardingStage.LaunchGenerate
+                } else {
+                    onboardingStage = AutoKeyOnboardingStage.Finished
+                }
+            }
+            AutoKeyOnboardingStage.LaunchGenerate -> {
+                onboardingStage = AutoKeyOnboardingStage.AwaitKey
+                viewModel.generateNewKey()
+            }
+            AutoKeyOnboardingStage.AwaitKey -> {
+                // Check for cancellation or error
+                if (uiState.snackbarMessage == "Authentication cancelled" || uiState.error != null) {
+                    onboardingStage = AutoKeyOnboardingStage.Finished
+                } else if (host.keyBlobId != null && uiState.keyStatus == "pending") {
+                    onboardingStage = AutoKeyOnboardingStage.LaunchDeploy
+                }
+            }
+            AutoKeyOnboardingStage.LaunchDeploy -> {
+                onboardingStage = AutoKeyOnboardingStage.Finished
+                viewModel.showPasswordDialog()
+            }
+            AutoKeyOnboardingStage.Finished -> {
+                // Do nothing, onboarding complete
+            }
+        }
+    }
 
     // Handle snackbar messages
     LaunchedEffect(uiState.snackbarMessage) {

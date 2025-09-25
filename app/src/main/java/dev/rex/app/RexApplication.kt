@@ -23,6 +23,8 @@ import android.os.StrictMode
 import android.util.Log
 import dagger.hilt.android.HiltAndroidApp
 import dev.rex.app.core.SettingsInitializer
+import dev.rex.app.core.SshSecurityBootstrap
+import java.security.Security
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -32,7 +34,23 @@ class RexApplication : Application() {
     lateinit var settingsInitializer: SettingsInitializer
 
     override fun onCreate() {
+        // TODO(claude): remove once SSH provisioning is stable
+        // Must run before any SSHJ class loading to configure slf4j logging
+        System.setProperty("org.slf4j.simpleLogger.log.net.schmizz", "debug")
+
         super.onCreate()
+
+        val providerWasInstalled = SshSecurityBootstrap.installIfNeeded { message ->
+            Log.d("Rex", message)
+        }
+
+        // TODO(claude): remove once SSH provisioning is stable
+        val eddsaProvider = Security.getProvider("EdDSA")
+        val bcProvider = Security.getProvider("BC")
+        Log.i(
+            "Rex",
+            "Providers — EdDSA available: ${eddsaProvider != null}, BC provider: ${bcProvider?.javaClass?.name}, installed now: $providerWasInstalled"
+        )
 
         // Force injection and initialization
         settingsInitializer.initialize()
@@ -56,4 +74,5 @@ class RexApplication : Application() {
             )
         }
     }
+
 }

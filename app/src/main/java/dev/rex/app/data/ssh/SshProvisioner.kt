@@ -18,6 +18,7 @@
 
 package dev.rex.app.data.ssh
 
+import android.util.Log
 import dev.rex.app.core.Gatekeeper
 import dev.rex.app.core.ProvisioningStep
 import dev.rex.app.core.StepStatus
@@ -153,6 +154,9 @@ class SshProvisioner @Inject constructor(
             }
 
         } catch (e: Exception) {
+            // TODO(claude): remove once SSH provisioning is stable
+            Log.e("RexProvisioner", "deployKeyToHost failed", e)
+
             // Mark current step as failed
             val currentStepIndex = steps.indexOfFirst { it.status == StepStatus.InProgress }
             if (currentStepIndex >= 0) {
@@ -165,7 +169,7 @@ class SshProvisioner @Inject constructor(
                 durationMs = duration,
                 stdout = stdout.toString(),
                 stderr = stderr.toString(),
-                errorMessage = e.message,
+                errorMessage = "${e::class.qualifiedName}: ${e.message}",
                 steps = steps
             )
         }

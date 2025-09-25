@@ -18,22 +18,19 @@
 
 package dev.rex.app.data.ssh
 
+import android.util.Log
 import dev.rex.app.core.ErrorMapper
 import dev.rex.app.data.repo.HostsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
-import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import net.schmizz.sshj.userauth.UserAuthException
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
-import java.io.ByteArrayInputStream
-import java.io.InputStream
-import java.net.ConnectException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
 import java.security.PublicKey
+import java.security.Security
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -52,6 +49,14 @@ class SshjClient @Inject constructor(
         timeoutsMs: Pair<Int, Int>,
         expectedPin: HostPin?
     ): HostPin {
+        // TODO(claude): remove once SSH provisioning is stable
+        val eddsaProvider = Security.getProvider("EdDSA")
+        Log.d("RexSsh", "Starting connect to $host:$port, timeouts=${timeoutsMs}, EdDSA provider present: ${eddsaProvider != null}")
+
+        checkNotNull(Security.getProvider(EdDSASecurityProvider.PROVIDER_NAME)) {
+            "EdDSA security provider not registered"
+        }
+
         try {
             val client = SSHClient()
             client.connectTimeout = timeoutsMs.first
@@ -101,6 +106,9 @@ class SshjClient @Inject constructor(
                 hostKeyVerifier.computeFingerprint(key.encoded)
             } ?: throw RuntimeException("Failed to capture server host key during connection")
 
+            // TODO(claude): remove once SSH provisioning is stable
+            Log.d("RexSsh", "Captured host key: algorithm=${actualPin.alg}, fingerprint=${actualPin.sha256}")
+
             // SECURITY: If no expected pin, log for future TOFU UI but allow connection
             if (expectedPin == null) {
                 // TODO: Surface actualPin to user for verification in future TOFU UI implementation
@@ -117,6 +125,8 @@ class SshjClient @Inject constructor(
             // Re-throw host key mismatch exceptions
             throw e
         } catch (e: Exception) {
+            // TODO(claude): remove once SSH provisioning is stable
+            Log.d("RexSsh", "Connection failed with exception: ${e::class.qualifiedName}: ${e.message}")
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("SSH connection failed: $message", e)
         }

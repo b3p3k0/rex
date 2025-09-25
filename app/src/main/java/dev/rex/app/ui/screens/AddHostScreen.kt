@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun AddHostScreen(
     onNavigateBack: () -> Unit,
+    onHostCreated: (String) -> Unit,
     viewModel: AddHostViewModel = hiltViewModel()
 ) {
     Log.i("Rex", "Screen: AddHostScreen")
@@ -105,12 +106,12 @@ fun AddHostScreen(
                 }
                 Button(
                     onClick = {
-                        viewModel.saveHost { 
-                            onNavigateBack() 
+                        viewModel.saveHost { hostId ->
+                            onHostCreated(hostId)
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = uiState.canSave
+                    enabled = uiState.canSave && !uiState.isLoading
                 ) {
                     Text("Save")
                 }
