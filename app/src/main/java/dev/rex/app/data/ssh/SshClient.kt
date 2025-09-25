@@ -25,6 +25,8 @@ data class HostPin(val alg: String, val sha256: String)
 
 class HostKeyMismatchException(message: String) : Exception(message)
 
+class TofuRequiredException(val hostPin: HostPin, message: String) : Exception(message)
+
 interface HostKeyVerifier {
     fun computeFingerprint(pubKey: ByteArray): HostPin
     fun verifyPinned(expected: HostPin, actual: HostPin): Boolean

@@ -19,6 +19,8 @@
 package dev.rex.app.data.ssh
 
 import dev.rex.app.core.Gatekeeper
+import dev.rex.app.core.ProvisioningStep
+import dev.rex.app.core.StepStatus
 import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.crypto.KeyBlobId
 import dev.rex.app.data.repo.HostsRepository
@@ -32,7 +34,8 @@ data class ProvisionResult(
     val durationMs: Long,
     val stdout: String,
     val stderr: String,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val steps: List<ProvisioningStep> = emptyList()
 )
 
 @Singleton
@@ -57,50 +60,81 @@ class SshProvisioner @Inject constructor(
         var stdout = StringBuilder()
         var stderr = StringBuilder()
 
+        // Initialize provisioning steps for progress tracking
+        val steps = mutableListOf(
+            ProvisioningStep("Connecting to host"),
+            ProvisioningStep("Authenticating with password"),
+            ProvisioningStep("Creating .ssh directory"),
+            ProvisioningStep("Setting directory permissions"),
+            ProvisioningStep("Checking for existing key"),
+            ProvisioningStep("Adding public key"),
+            ProvisioningStep("Setting file permissions"),
+            ProvisioningStep("Verifying key deployment")
+        )
+
         try {
-            // Get the public key for deployment
+            // Step 1: Get the public key for deployment
             val publicKey = keyVault.getPublicKeyOpenssh(keyBlobId)
 
-            // Connect with password authentication
+            // Step 2: Connect with password authentication
+            steps[0] = steps[0].copy(status = StepStatus.InProgress)
             val client = createSshClient()
             val actualPin = client.connect(hostname, port, timeoutsMs, null)
+            steps[0] = steps[0].copy(status = StepStatus.Completed)
 
             try {
+                // Step 3: Authenticate
+                steps[1] = steps[1].copy(status = StepStatus.InProgress)
                 client.authUsernamePassword(username, password)
+                steps[1] = steps[1].copy(status = StepStatus.Completed)
 
-                // Create .ssh directory if it doesn't exist
+                // Step 4: Create .ssh directory
+                steps[2] = steps[2].copy(status = StepStatus.InProgress)
                 val mkdirResult = execWithOutput(client, "mkdir -p ~/.ssh")
                 stdout.append("mkdir: ${mkdirResult.first}\n")
                 stderr.append("mkdir: ${mkdirResult.second}\n")
+                steps[2] = steps[2].copy(status = StepStatus.Completed)
 
-                // Set proper permissions on .ssh directory
+                // Step 5: Set directory permissions
+                steps[3] = steps[3].copy(status = StepStatus.InProgress)
                 val chmodDirResult = execWithOutput(client, "chmod 700 ~/.ssh")
                 stdout.append("chmod dir: ${chmodDirResult.first}\n")
                 stderr.append("chmod dir: ${chmodDirResult.second}\n")
+                steps[3] = steps[3].copy(status = StepStatus.Completed)
 
-                // Check if key already exists in authorized_keys
+                // Step 6: Check if key already exists
+                steps[4] = steps[4].copy(status = StepStatus.InProgress)
                 val checkKeyResult = execWithOutput(client,
                     "grep -Fq '${publicKey.trim()}' ~/.ssh/authorized_keys 2>/dev/null && echo 'EXISTS' || echo 'NOT_FOUND'"
                 )
                 stdout.append("check key: ${checkKeyResult.first}\n")
+                steps[4] = steps[4].copy(status = StepStatus.Completed)
 
+                // Step 7: Add public key if not exists
+                steps[5] = steps[5].copy(status = StepStatus.InProgress)
                 if (!checkKeyResult.first.contains("EXISTS")) {
-                    // Append the public key to authorized_keys
                     val appendKeyResult = execWithOutput(client,
                         "echo '${publicKey.trim()}' >> ~/.ssh/authorized_keys"
                     )
                     stdout.append("append key: ${appendKeyResult.first}\n")
                     stderr.append("append key: ${appendKeyResult.second}\n")
+                } else {
+                    stdout.append("Key already exists, skipping\n")
                 }
+                steps[5] = steps[5].copy(status = StepStatus.Completed)
 
-                // Set proper permissions on authorized_keys
+                // Step 8: Set file permissions
+                steps[6] = steps[6].copy(status = StepStatus.InProgress)
                 val chmodFileResult = execWithOutput(client, "chmod 600 ~/.ssh/authorized_keys")
                 stdout.append("chmod file: ${chmodFileResult.first}\n")
                 stderr.append("chmod file: ${chmodFileResult.second}\n")
+                steps[6] = steps[6].copy(status = StepStatus.Completed)
 
-                // Verify the key was added successfully
+                // Step 9: Verify deployment
+                steps[7] = steps[7].copy(status = StepStatus.InProgress)
                 val verifyResult = execWithOutput(client, "cat ~/.ssh/authorized_keys | tail -1")
                 stdout.append("verify: ${verifyResult.first}\n")
+                steps[7] = steps[7].copy(status = StepStatus.Completed)
 
                 val duration = System.currentTimeMillis() - startTime
 
@@ -108,7 +142,8 @@ class SshProvisioner @Inject constructor(
                     success = true,
                     durationMs = duration,
                     stdout = stdout.toString(),
-                    stderr = stderr.toString()
+                    stderr = stderr.toString(),
+                    steps = steps
                 )
 
             } finally {
@@ -118,13 +153,20 @@ class SshProvisioner @Inject constructor(
             }
 
         } catch (e: Exception) {
+            // Mark current step as failed
+            val currentStepIndex = steps.indexOfFirst { it.status == StepStatus.InProgress }
+            if (currentStepIndex >= 0) {
+                steps[currentStepIndex] = steps[currentStepIndex].copy(status = StepStatus.Failed)
+            }
+
             val duration = System.currentTimeMillis() - startTime
             return ProvisionResult(
                 success = false,
                 durationMs = duration,
                 stdout = stdout.toString(),
                 stderr = stderr.toString(),
-                errorMessage = e.message
+                errorMessage = e.message,
+                steps = steps
             )
         }
     }
@@ -185,13 +227,20 @@ class SshProvisioner @Inject constructor(
         val stdout = StringBuilder()
         val stderr = StringBuilder()
 
+        // Stream real command output without deterministic expectations
         client.exec(command).collect { byteString ->
-            // For now, treat all output as stdout
-            // Real implementation would separate stdout/stderr
+            // All output goes to stdout for now - stderr separation would require
+            // separate channel handling in the SSH client implementation
             stdout.append(byteString.utf8())
         }
 
-        client.waitExitCode(5000)
+        // Wait for command completion with timeout
+        val exitCode = client.waitExitCode(5000)
+
+        // Include exit code in output for debugging if non-zero
+        if (exitCode != 0) {
+            stderr.append("Command exited with code: $exitCode\n")
+        }
 
         return Pair(stdout.toString(), stderr.toString())
     }

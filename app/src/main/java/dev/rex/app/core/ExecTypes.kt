@@ -26,6 +26,40 @@ sealed interface ExecStatus {
     data object Cancelled : ExecStatus
 }
 
+/**
+ * Connection state tracking for SSH operations
+ */
+sealed class SshConnectionState {
+    data object Idle : SshConnectionState()
+    data object Connecting : SshConnectionState()
+    data object Authenticating : SshConnectionState()
+    data object Connected : SshConnectionState()
+    data class Failed(val error: String) : SshConnectionState()
+}
+
+/**
+ * Command execution state tracking with real-time feedback
+ */
+sealed class CommandExecutionState {
+    data object Idle : CommandExecutionState()
+    data object Starting : CommandExecutionState()
+    data class Streaming(val output: String) : CommandExecutionState()
+    data class Completed(val exitCode: Int, val output: String) : CommandExecutionState()
+    data object Cancelling : CommandExecutionState()
+    data class Cancelled(val partialOutput: String) : CommandExecutionState()
+    data class Failed(val error: String) : CommandExecutionState()
+}
+
+/**
+ * Provisioning step status for progress tracking
+ */
+data class ProvisioningStep(
+    val name: String,
+    val status: StepStatus = StepStatus.Pending
+)
+
+enum class StepStatus { Pending, InProgress, Completed, Failed }
+
 enum class ExecError {
     DNS,
     REFUSED,

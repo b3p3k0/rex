@@ -44,11 +44,28 @@ object ErrorMapper {
             else -> {
                 // Check if it's a specialized SSH exception
                 when (throwable::class.java.simpleName) {
-                    "HostKeyMismatchException" -> ExecError.HOSTKEY_MISMATCH to "Host key mismatch."
-                    "AuthException" -> ExecError.AUTH_FAILED to "Authentication failed."
-                    else -> ExecError.IO to "Input/output error."
+                    "HostKeyMismatchException" -> ExecError.HOSTKEY_MISMATCH to "Host identity changed—verify fingerprints before retrying."
+                    "UserAuthException" -> ExecError.AUTH_FAILED to "Couldn't authenticate—check username and password."
+                    "TransportException" -> ExecError.REFUSED to "Connection failed—check hostname and network."
+                    "ConnectionException" -> ExecError.REFUSED to "Connection refused."
+                    else -> ExecError.IO to "Connection failed—please try again."
                 }
             }
+        }
+    }
+
+    /**
+     * Maps SSH-specific exceptions to user-friendly error messages
+     * SECURITY: Never exposes raw exception messages that might leak sensitive data
+     */
+    fun mapSshException(throwable: Throwable): Pair<ExecError, String> {
+        return when (throwable::class.java.simpleName) {
+            "UserAuthException" -> ExecError.AUTH_FAILED to "Couldn't authenticate—check username and password"
+            "TransportException" -> ExecError.REFUSED to "Connection failed—check hostname and network"
+            "ConnectionException" -> ExecError.REFUSED to "Connection refused"
+            "HostKeyMismatchException" -> ExecError.HOSTKEY_MISMATCH to "Host identity changed—verify fingerprints before retrying"
+            "TofuRequiredException" -> ExecError.HOSTKEY_MISMATCH to "First connection requires fingerprint verification"
+            else -> ExecError.IO to "SSH operation failed—please try again"
         }
     }
     
