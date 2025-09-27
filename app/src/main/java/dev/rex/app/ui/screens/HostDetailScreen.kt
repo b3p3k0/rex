@@ -23,18 +23,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.EntryPoint
@@ -134,7 +140,7 @@ fun HostDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -621,6 +627,7 @@ private fun PasswordDialog(
     onConfirm: (String) -> Unit
 ) {
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -633,10 +640,24 @@ private fun PasswordDialog(
 
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { input ->
+                        password = input.filterNot { it == '\n' || it == '\r' }
+                    },
                     label = { Text("Password") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
+                    trailingIcon = {
+                        val icon = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility
+                        val description = if (passwordVisible) "Hide password" else "Show password"
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(icon, contentDescription = description)
+                        }
+                    }
                 )
             }
         },

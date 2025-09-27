@@ -21,8 +21,6 @@ package dev.rex.app.core
 import android.util.Log
 import dev.rex.app.data.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -37,10 +35,9 @@ import javax.inject.Singleton
 @Singleton
 class SettingsInitializer @Inject constructor(
     private val settingsStore: SettingsStore,
-    private val securityManager: SecurityManager
+    private val securityManager: SecurityManager,
+    private val scope: CoroutineScope
 ) {
-
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     fun initialize() {
         scope.launch {

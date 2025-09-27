@@ -21,12 +21,16 @@ package dev.rex.app.ui.screens
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,7 +56,7 @@ fun AddHostScreen(
                             contentDescription = "Go back" 
                         }
                     ) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -70,6 +74,8 @@ fun AddHostScreen(
                 onValueChange = viewModel::updateNickname,
                 label = { Text("Nickname") },
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Next),
                 isError = uiState.nicknameError != null,
                 supportingText = uiState.nicknameError?.let { { Text(it) } }
             )
@@ -77,8 +83,10 @@ fun AddHostScreen(
             OutlinedTextField(
                 value = uiState.hostname,
                 onValueChange = viewModel::updateHostname,
-                label = { Text("Hostname") },
+                label = { Text("Hostname/IP address") },
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Next),
                 isError = uiState.hostnameError != null,
                 supportingText = uiState.hostnameError?.let { { Text(it) } }
             )
@@ -88,6 +96,12 @@ fun AddHostScreen(
                 onValueChange = viewModel::updateUsername,
                 label = { Text("Username") },
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions.Default.copy(
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Done
+                ),
                 isError = uiState.usernameError != null,
                 supportingText = uiState.usernameError?.let { { Text(it) } }
             )

@@ -52,8 +52,9 @@ class KeyVaultImpl @Inject constructor(
     
     override suspend fun importPrivateKeyPem(pem: ByteArray): KeyBlobId {
         val keyBlobId = KeyBlobId(UUID.randomUUID().toString())
+        val publicKey = extractPublicKeyFromPem(pem)
         val (encryptedBlob, wrappedDek) = encryptWithNewDek(pem)
-        
+
         val keyBlobEntity = KeyBlobEntity(
             id = keyBlobId.id,
             alg = "ed25519",
@@ -63,7 +64,7 @@ class KeyVaultImpl @Inject constructor(
             wrappedDekIv = wrappedDek.iv,
             wrappedDekTag = wrappedDek.tag,
             wrappedDekCiphertext = wrappedDek.ciphertext,
-            publicKeyOpenssh = extractPublicKeyFromPem(pem),
+            publicKeyOpenssh = publicKey,
             createdAt = System.currentTimeMillis()
         )
         

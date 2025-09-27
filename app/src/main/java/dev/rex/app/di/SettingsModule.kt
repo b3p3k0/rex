@@ -27,6 +27,9 @@ import dagger.hilt.components.SingletonComponent
 import dev.rex.app.core.SecurityManager
 import dev.rex.app.core.SettingsInitializer
 import dev.rex.app.data.settings.SettingsStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import javax.inject.Singleton
 
 @Module
@@ -47,5 +50,9 @@ object SettingsModule {
     fun provideSettingsInitializer(
         settingsStore: SettingsStore,
         securityManager: SecurityManager
-    ): SettingsInitializer = SettingsInitializer(settingsStore, securityManager)
+    ): SettingsInitializer = SettingsInitializer(
+        settingsStore = settingsStore,
+        securityManager = securityManager,
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    )
 }

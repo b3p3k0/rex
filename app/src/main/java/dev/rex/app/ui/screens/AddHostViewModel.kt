@@ -62,23 +62,26 @@ class AddHostViewModel @Inject constructor(
     val uiState: StateFlow<AddHostUiState> = _uiState.asStateFlow()
 
     fun updateNickname(nickname: String) {
+        val sanitized = nickname.filterNot { it == '\n' || it == '\r' }
         _uiState.value = _uiState.value.copy(
-            nickname = nickname,
-            nicknameError = if (nickname.isBlank()) "Nickname is required" else null
+            nickname = sanitized,
+            nicknameError = if (sanitized.isBlank()) "Nickname is required" else null
         )
     }
 
     fun updateHostname(hostname: String) {
+        val sanitized = hostname.filterNot { it == '\n' || it == '\r' }
         _uiState.value = _uiState.value.copy(
-            hostname = hostname,
-            hostnameError = if (hostname.isBlank()) "Hostname is required" else null
+            hostname = sanitized,
+            hostnameError = if (sanitized.isBlank()) "Hostname is required" else null
         )
     }
 
     fun updateUsername(username: String) {
+        val sanitized = username.filterNot { it == '\n' || it == '\r' }
         _uiState.value = _uiState.value.copy(
-            username = username,
-            usernameError = if (username.isBlank()) "Username is required" else null
+            username = sanitized,
+            usernameError = if (sanitized.isBlank()) "Username is required" else null
         )
     }
 

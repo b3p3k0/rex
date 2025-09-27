@@ -20,36 +20,39 @@ package dev.rex.app.core
 
 import android.util.Log
 import dev.rex.app.data.settings.SettingsStore
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.verify
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SettingsInitializerTest {
 
     private lateinit var settingsStore: SettingsStore
     private lateinit var securityManager: SecurityManager
-    private lateinit var settingsInitializer: SettingsInitializer
 
     @Before
     fun setup() {
         // Mock Android Log to prevent "not mocked" errors in unit tests
         mockkStatic(Log::class)
         every { Log.d(any<String>(), any<String>()) } returns 0
+        every { Log.d(any<String>(), any<String>(), any()) } returns 0
         every { Log.w(any<String>(), any<String>()) } returns 0
+        every { Log.w(any<String>(), any<String>(), any()) } returns 0
         every { Log.i(any<String>(), any<String>()) } returns 0
+        every { Log.i(any<String>(), any<String>(), any()) } returns 0
         every { Log.e(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>(), any()) } returns 0
 
         settingsStore = mockk()
         securityManager = mockk(relaxed = true)
-        settingsInitializer = SettingsInitializer(settingsStore, securityManager)
     }
 
     @Test
@@ -57,10 +60,10 @@ class SettingsInitializerTest {
         val customTtl = 10
         every { settingsStore.credentialGateTtlMinutes } returns flowOf(customTtl)
 
+        val settingsInitializer = SettingsInitializer(settingsStore, securityManager, this)
         settingsInitializer.initialize()
 
-        // Wait for background coroutine
-        kotlinx.coroutines.delay(100)
+        advanceUntilIdle()
 
         verify { securityManager.setGateTtlMinutes(customTtl) }
     }
@@ -71,10 +74,10 @@ class SettingsInitializerTest {
             throw IOException("DataStore corrupted")
         }
 
+        val settingsInitializer = SettingsInitializer(settingsStore, securityManager, this)
         settingsInitializer.initialize()
 
-        // Wait for background coroutine and retry logic
-        kotlinx.coroutines.delay(500)
+        advanceUntilIdle()
 
         verify { securityManager.setGateTtlMinutes(SettingsStore.DEFAULT_CREDENTIAL_GATE_TTL_MINUTES) }
     }
@@ -85,10 +88,10 @@ class SettingsInitializerTest {
             throw RuntimeException("Unexpected error")
         }
 
+        val settingsInitializer = SettingsInitializer(settingsStore, securityManager, this)
         settingsInitializer.initialize()
 
-        // Wait for background coroutine
-        kotlinx.coroutines.delay(100)
+        advanceUntilIdle()
 
         verify { securityManager.setGateTtlMinutes(SettingsStore.DEFAULT_CREDENTIAL_GATE_TTL_MINUTES) }
     }

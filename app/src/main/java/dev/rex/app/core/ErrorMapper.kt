@@ -48,7 +48,7 @@ object ErrorMapper {
                     "UserAuthException" -> ExecError.AUTH_FAILED to "Couldn't authenticate—check username and password."
                     "TransportException" -> ExecError.REFUSED to "Connection failed—check hostname and network."
                     "ConnectionException" -> ExecError.REFUSED to "Connection refused."
-                    else -> ExecError.IO to "Connection failed—please try again."
+                    else -> ExecError.IO to "Input/output error."
                 }
             }
         }
