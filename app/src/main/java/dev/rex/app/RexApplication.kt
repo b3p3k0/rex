@@ -26,7 +26,6 @@ import dev.rex.app.core.SettingsInitializer
 import dev.rex.app.core.SshSecurityBootstrap
 import net.schmizz.sshj.common.SecurityUtils
 import org.bouncycastle.jce.provider.BouncyCastleProvider
-import java.security.Provider
 import java.security.Security
 import javax.inject.Inject
 
@@ -57,7 +56,6 @@ class RexApplication : Application() {
 
         // Configure SSHJ to use our full BC provider
         SecurityUtils.setSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
-        SecurityUtils.registerSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
 
         // TODO(claude): remove once SSH provisioning is stable
         val eddsaProvider = Security.getProvider("EdDSA")
