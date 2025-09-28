@@ -27,8 +27,14 @@ import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.userauth.UserAuthException
+import net.schmizz.sshj.userauth.keyprovider.FileKeyProvider
+import net.schmizz.sshj.userauth.keyprovider.KeyFormat
+import net.schmizz.sshj.userauth.keyprovider.KeyProviderUtil
+import net.schmizz.sshj.userauth.keyprovider.OpenSSHKeyFile
+import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
+import java.io.StringReader
 import java.security.PublicKey
 import java.security.Security
 import java.util.concurrent.TimeUnit
@@ -42,6 +48,7 @@ class SshjClient @Inject constructor(
     private var sshClient: SSHClient? = null
     private var currentSession: Session? = null
     private var currentCommand: Session.Command? = null
+    private var connectedHost: String? = null
 
     private fun cleanupSession() {
         try {
@@ -115,6 +122,7 @@ class SshjClient @Inject constructor(
 
             client.connect(host, port)
             sshClient = client
+            connectedHost = host
 
             // SECURITY: Extract the actual server host key from the captured key
             val actualPin = capturedHostKey?.let { key ->
@@ -151,15 +159,43 @@ class SshjClient @Inject constructor(
         val client = sshClient ?: throw IllegalStateException("Not connected")
 
         try {
-            // SECURITY: Use ByteArrayInputStream to avoid String conversion that defeats zeroization
-            val keyProvider = client.loadKeys(String(privateKeyPem, Charsets.UTF_8), null as CharArray?)
+            // Decode PEM bytes to string once
+            val pem = String(privateKeyPem, Charsets.UTF_8)
+
+            // Detect key format using StringReader (detection doesn't retain the reader)
+            val keyFormat = StringReader(pem).use { reader ->
+                KeyProviderUtil.detectKeyFileFormat(reader, /*failOnUnknown=*/true)
+            }
+
+            // Create appropriate key provider based on format
+            val keyProvider: FileKeyProvider = when (keyFormat) {
+                KeyFormat.PKCS8 -> PKCS8KeyFile()
+                KeyFormat.OpenSSH, KeyFormat.OpenSSHv1 -> OpenSSHKeyFile()
+                else -> throw RuntimeException("Unsupported private key format: $keyFormat")
+            }
+
+            // Initialize provider with PEM string (SSHJ uses PrivateKeyStringResource internally)
+            keyProvider.init(pem, null as String?, null)
+
+            // Force early key parsing to catch bad PEM before auth
+            try {
+                keyProvider.public  // This forces SSHJ to parse the key
+            } catch (e: Exception) {
+                throw RuntimeException("Failed to parse private key", e)
+            }
 
             // Authenticate using the private key
+            Log.i("RexSsh", "Attempting authPublickey for $username@$connectedHost")
             client.authPublickey(username, keyProvider)
 
+            // TODO(claude): remove once SSH provisioning is stable
+            Log.i("RexSsh", "authPublickey succeeded for $username@$connectedHost")
+
         } catch (e: UserAuthException) {
+            Log.e("RexSsh", "authPublickey rejected by server for $username@$connectedHost", e)
             throw RuntimeException("SSH key authentication failed: Invalid credentials", e)
         } catch (e: Exception) {
+            Log.e("RexSsh", "authUsernameKey failed for $username@$connectedHost", e)
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("SSH authentication failed: $message", e)
         } finally {
@@ -271,5 +307,6 @@ class SshjClient @Inject constructor(
         }
 
         sshClient = null
+        connectedHost = null
     }
 }
