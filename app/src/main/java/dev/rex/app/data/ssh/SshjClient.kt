@@ -42,6 +42,21 @@ class SshjClient @Inject constructor(
     private var sshClient: SSHClient? = null
     private var currentSession: Session? = null
     private var currentCommand: Session.Command? = null
+
+    private fun cleanupSession() {
+        try {
+            currentCommand?.close()
+        } catch (e: Exception) {
+            // Ignore cleanup errors
+        }
+        try {
+            currentSession?.close()
+        } catch (e: Exception) {
+            // Ignore cleanup errors
+        }
+        currentCommand = null
+        currentSession = null
+    }
     
     override suspend fun connect(
         host: String,
@@ -207,26 +222,16 @@ class SshjClient @Inject constructor(
             }
 
         } catch (e: Exception) {
+            // Clean up session on any failure
+            cleanupSession()
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("Command execution failed: $message", e)
-        } finally {
-            // SECURITY: Ensure complete cleanup of session and command
-            try {
-                cmd?.close()
-            } catch (e: Exception) {
-                // Ignore cleanup errors
-            }
-            try {
-                session.close()
-            } catch (e: Exception) {
-                // Ignore cleanup errors
-            }
-            currentSession = null
         }
     }
     
     override suspend fun waitExitCode(timeoutMs: Int?): Int {
         val session = currentSession ?: throw IllegalStateException("No active session")
+        val command = currentCommand ?: throw IllegalStateException("No active command")
 
         return try {
             if (timeoutMs != null) {
@@ -238,44 +243,33 @@ class SshjClient @Inject constructor(
 
             // Get the actual exit status from the command
             // Return -1 if null as documented
-            currentCommand?.exitStatus ?: -1
+            command.exitStatus ?: -1
 
         } catch (e: Exception) {
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("Command timeout or execution failed: $message", e)
+        } finally {
+            cleanupSession()
         }
     }
     
     override suspend fun cancel() {
         try {
-            currentSession?.let { session ->
-                // SECURITY: Close the session cleanly within 1 second to prevent poisoned session reuse
-                if (session.isOpen) {
-                    session.close()
-                }
-            }
+            cleanupSession()
         } catch (e: Exception) {
             // Log but don't throw on cleanup - cancellation should always succeed
-        } finally {
-            currentSession = null
-            currentCommand = null
         }
     }
     
     override fun close() {
-        try {
-            currentSession?.close()
-        } catch (e: Exception) {
-            // Ignore cleanup errors
-        }
-        
+        cleanupSession()
+
         try {
             sshClient?.disconnect()
         } catch (e: Exception) {
             // Ignore cleanup errors
         }
-        
-        currentSession = null
+
         sshClient = null
     }
 }

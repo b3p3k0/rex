@@ -30,7 +30,12 @@ import dev.rex.app.core.DangerousCommandValidator
 import dev.rex.app.core.Gatekeeper
 import dev.rex.app.core.GlobalCEH
 import dev.rex.app.core.Redactor
+import dev.rex.app.data.crypto.KeyBlobId
+import dev.rex.app.data.crypto.KeyVault
+import dev.rex.app.data.repo.HostCommandRepository
+import dev.rex.app.data.repo.HostsRepository
 import dev.rex.app.data.settings.SettingsStore
+import dev.rex.app.data.ssh.HostPin
 import dev.rex.app.data.ssh.SshClient
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -45,7 +50,9 @@ data class SessionUiState(
     val exitCode: Int? = null,
     val elapsedTimeMs: Long = 0,
     val canCopy: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val hostNickname: String = "",
+    val commandName: String = ""
 )
 
 @HiltViewModel
@@ -55,7 +62,10 @@ class SessionViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
     private val gatekeeper: Gatekeeper,
     private val settingsStore: SettingsStore,
-    private val dangerousCommandValidator: DangerousCommandValidator
+    private val dangerousCommandValidator: DangerousCommandValidator,
+    private val hostCommandRepository: HostCommandRepository,
+    private val keyVault: KeyVault,
+    private val hostsRepository: HostsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SessionUiState())
@@ -66,15 +76,101 @@ class SessionViewModel @Inject constructor(
     private var clipboardClearJob: Job? = null
     private val rawOutput = StringBuilder()
 
-    fun executeCommand(command: String, pty: Boolean = false) {
+    fun startSession(mappingId: String) {
+        // Cancel any in-flight execution job to prevent double-tap races
+        executionJob?.cancel()
+
+        viewModelScope.launch(GlobalCEH.handler) {
+            try {
+                // Fetch the mapping
+                val mapping = hostCommandRepository.getHostCommandMapping(mappingId)
+                if (mapping == null) {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Command mapping not found: $mappingId"
+                    )
+                    return@launch
+                }
+
+                // Update UI state with mapping info and reset for new session
+                _uiState.value = _uiState.value.copy(
+                    hostNickname = mapping.nickname,
+                    commandName = mapping.name,
+                    output = "",
+                    exitCode = null,
+                    elapsedTimeMs = 0,
+                    error = null,
+                    canCopy = false
+                )
+
+                // Check if command is dangerous and require gate
+                if (dangerousCommandValidator.isDangerous(mapping.command)) {
+                    gatekeeper.requireGateForDangerousCommand()
+                }
+
+                // Build expected host pin if we have a fingerprint
+                val expectedPin = if (!mapping.pinnedHostKeyFingerprint.isNullOrBlank()) {
+                    HostPin("ssh-rsa", mapping.pinnedHostKeyFingerprint)
+                } else null
+
+                // Connect to host
+                val actualPin = sshClient.connect(
+                    host = mapping.hostname,
+                    port = mapping.port,
+                    timeoutsMs = Pair(mapping.connectTimeoutMs, mapping.readTimeoutMs),
+                    expectedPin = expectedPin
+                )
+
+                // TOFU fingerprint update: if no strict host key and no stored fingerprint
+                if (!mapping.strictHostKey && mapping.pinnedHostKeyFingerprint.isNullOrBlank()) {
+                    hostsRepository.updateHostFingerprint(mapping.id, actualPin.sha256)
+                }
+
+                // Authenticate based on auth method
+                when (mapping.authMethod.lowercase()) {
+                    "key" -> {
+                        if (mapping.keyBlobId.isNullOrBlank()) {
+                            _uiState.value = _uiState.value.copy(
+                                error = "Key authentication required but no key blob ID found"
+                            )
+                            return@launch
+                        }
+
+                        val keyBytes = keyVault.decryptPrivateKey(KeyBlobId(mapping.keyBlobId))
+                        sshClient.authUsernameKey(mapping.username, keyBytes)
+                    }
+                    "password" -> {
+                        _uiState.value = _uiState.value.copy(
+                            error = "Password authentication is not yet supported"
+                        )
+                        return@launch
+                    }
+                    else -> {
+                        _uiState.value = _uiState.value.copy(
+                            error = "Unsupported authentication method: ${mapping.authMethod}"
+                        )
+                        return@launch
+                    }
+                }
+
+                // Execute the command
+                executeCommandWithTimeout(mapping.command, mapping.allowPty, mapping.defaultTimeoutMs)
+
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Session failed: ${e.message}"
+                )
+            } finally {
+                sshClient.close()
+                stopTimer()
+            }
+        }
+    }
+
+    private fun executeCommandWithTimeout(command: String, pty: Boolean = false, timeoutMs: Int) {
         if (_uiState.value.isRunning) return
 
         _uiState.value = _uiState.value.copy(
-            isRunning = true,
-            output = "",
-            exitCode = null,
-            elapsedTimeMs = 0,
-            error = null
+            isRunning = true
         )
 
         rawOutput.clear()
@@ -82,35 +178,28 @@ class SessionViewModel @Inject constructor(
 
         executionJob = viewModelScope.launch(GlobalCEH.handler) {
             try {
-                // Check if command is dangerous and require gate
-                if (dangerousCommandValidator.isDangerous(command)) {
-                    gatekeeper.requireGateForDangerousCommand()
-                }
-
-                // TODO: Add TOFU trust gating when host key verification is integrated
-                // if (needsTofuTrust(hostname)) {
-                //     gatekeeper.requireGateForTofuTrust()
-                // }
+                // Stream command output
                 sshClient.exec(command, pty).collect { byteString ->
                     val text = byteString.utf8()
                     rawOutput.append(text)
-                    
+
                     // Apply redaction before displaying
                     val redactedOutput = Redactor.redact(rawOutput.toString())
-                    
+
                     _uiState.value = _uiState.value.copy(
                         output = redactedOutput
                     )
                 }
 
-                // Wait for exit code
-                val exitCode = sshClient.waitExitCode(30000) // 30 second timeout
-                
+                // Wait for exit code with timeout from mapping or default
+                val actualTimeout = if (timeoutMs > 0) timeoutMs else 30000
+                val exitCode = sshClient.waitExitCode(actualTimeout)
+
                 val allowCopy = settingsStore.allowCopyOutput.first()
                 _uiState.value = _uiState.value.copy(
                     isRunning = false,
                     exitCode = exitCode,
-                    canCopy = allowCopy
+                    canCopy = allowCopy && exitCode == 0 // Only allow copy on success
                 )
 
             } catch (e: Exception) {
@@ -121,10 +210,13 @@ class SessionViewModel @Inject constructor(
                 )
             } finally {
                 stopTimer()
-                // Clear sensitive data from memory
                 rawOutput.clear()
             }
         }
+    }
+
+    fun executeCommand(command: String, pty: Boolean = false) {
+        executeCommandWithTimeout(command, pty, 30000)
     }
 
     fun cancelExecution() {
@@ -141,7 +233,6 @@ class SessionViewModel @Inject constructor(
                 canCopy = allowCopy
             )
             stopTimer()
-            // Clear sensitive data from memory
             rawOutput.clear()
         }
     }

@@ -39,18 +39,28 @@ import dev.rex.app.ui.components.TerminalPane
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionScreen(
-    hostNickname: String,
-    commandName: String,
+    mappingId: String,
     onNavigateBack: () -> Unit,
     viewModel: SessionViewModel = hiltViewModel()
 ) {
     Log.i("Rex", "Screen: SessionScreen")
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    LaunchedEffect(mappingId) {
+        viewModel.startSession(mappingId)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("$hostNickname • $commandName") },
+                title = {
+                    val title = if (uiState.hostNickname.isNotEmpty() && uiState.commandName.isNotEmpty()) {
+                        "${uiState.hostNickname} • ${uiState.commandName}"
+                    } else {
+                        "Loading..."
+                    }
+                    Text(title)
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -85,6 +95,21 @@ fun SessionScreen(
                     .weight(1f)
                     .fillMaxWidth()
             )
+
+            // Show error message if present
+            uiState.error?.let { error ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
         }
     }
 }

@@ -34,6 +34,10 @@ class HostCommandRepository @Inject constructor(
     fun getAllHostCommandMappings(): Flow<List<HostCommandMapping>> {
         return hostCommandsDao.getHostCommandMappings()
     }
+
+    suspend fun getHostCommandMapping(mappingId: String): HostCommandMapping? {
+        return hostCommandsDao.getHostCommandMapping(mappingId)
+    }
     
     fun observeHostCommandRows(): Flow<List<HostCommandRow>> {
         return hostCommandsDao.observeHostCommandRows()

@@ -24,6 +24,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
+import android.net.Uri
 import dev.rex.app.ui.screens.AddCommandScreen
 import dev.rex.app.ui.screens.AddHostScreen
 import dev.rex.app.ui.screens.EditCommandScreen
@@ -74,7 +75,7 @@ fun RexNavigation(
                 },
                 onExecuteCommand = { hostCommand ->
                     // Navigate to session screen for real execution
-                    navController.navigate("${RexDestinations.SESSION}/${hostCommand.nickname}/${hostCommand.name}")
+                    navController.navigate("${RexDestinations.SESSION}/${Uri.encode(hostCommand.mappingId)}")
                 }
             )
         }
@@ -132,13 +133,14 @@ fun RexNavigation(
             )
         }
 
-        composable("${RexDestinations.SESSION}/{hostNickname}/{commandName}") { backStackEntry ->
-            val hostNickname = backStackEntry.arguments?.getString("hostNickname") ?: ""
-            val commandName = backStackEntry.arguments?.getString("commandName") ?: ""
+        composable(
+            "${RexDestinations.SESSION}/{mappingId}",
+            arguments = listOf(navArgument("mappingId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val mappingId = backStackEntry.arguments?.getString("mappingId") ?: ""
 
             SessionScreen(
-                hostNickname = hostNickname,
-                commandName = commandName,
+                mappingId = Uri.decode(mappingId),
                 onNavigateBack = {
                     navController.popBackStack()
                 }

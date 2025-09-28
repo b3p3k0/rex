@@ -117,6 +117,21 @@ interface HostCommandsDao {
     """)
     fun observeHostCommandRows(): Flow<List<HostCommandRow>>
 
+    @Query("""
+        SELECT h.id, h.nickname, h.hostname, h.port, h.username,
+               h.auth_method, h.key_blob_id, h.connect_timeout_ms, h.read_timeout_ms,
+               h.strict_host_key, h.pinned_host_key_fingerprint, h.key_provisioned_at, h.key_provision_status,
+               h.created_at, h.updated_at,
+               c.name, c.command, c.require_confirmation, c.default_timeout_ms, c.allow_pty,
+               hc.host_id || '_' || hc.command_id as mapping_id, hc.sort_index
+        FROM host_commands hc
+        INNER JOIN hosts h ON hc.host_id = h.id
+        INNER JOIN commands c ON hc.command_id = c.id
+        WHERE hc.host_id || '_' || hc.command_id = :mappingId
+        LIMIT 1
+    """)
+    suspend fun getHostCommandMapping(mappingId: String): HostCommandMapping?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHostCommand(hostCommand: HostCommandEntity): Long
 
