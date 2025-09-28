@@ -263,6 +263,7 @@ class SshjClient @Inject constructor(
             }
 
             Log.d("RexSsh", "exec stream completed for $connectedHost")
+            Log.d("RexSsh", "exec: leaving session active for waitExitCode() call")
 
         } catch (e: Exception) {
             // Clean up session on any failure
@@ -294,7 +295,9 @@ class SshjClient @Inject constructor(
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("Command timeout or execution failed: $message", e)
         } finally {
+            Log.d("RexSsh", "waitExitCode cleanup: cleaning up session and command")
             cleanupSession()
+            Log.d("RexSsh", "waitExitCode cleanup: session cleanup completed")
         }
     }
 

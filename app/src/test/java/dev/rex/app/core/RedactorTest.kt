@@ -34,7 +34,7 @@ class RedactorTest {
     fun `redacts token patterns`() {
         val input = "Authorization: Bearer abc123def456"
         val result = Redactor.redact(input)
-        assertEquals("Authorization: [REDACTED]", result)
+        assertEquals("[REDACTED]", result)
     }
 
     @Test

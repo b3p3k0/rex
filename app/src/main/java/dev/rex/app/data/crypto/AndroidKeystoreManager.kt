@@ -70,8 +70,16 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
     
     override suspend fun wrapDek(rawDek: ByteArray): WrappedKey {
         ensureKeys()
-        
-        val secretKey = keyStore.getKey(KEK_ALIAS, null) as SecretKey
+
+        val key = keyStore.getKey(KEK_ALIAS, null)
+        if (key == null) {
+            throw IllegalStateException("KEK not found in keystore. Key may have been invalidated due to device security changes.")
+        }
+
+        val secretKey = key as? SecretKey
+        if (secretKey == null) {
+            throw IllegalStateException("KEK is not a SecretKey. Keystore may be corrupted.")
+        }
         val cipher = Cipher.getInstance(AES_GCM_CIPHER)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         
@@ -94,7 +102,29 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
         ensureKeys()
 
         try {
-            val secretKey = keyStore.getKey(KEK_ALIAS, null) as SecretKey
+            val key = keyStore.getKey(KEK_ALIAS, null)
+            if (key == null) {
+                throw IllegalStateException("KEK not found in keystore. Key may have been invalidated due to device security changes.")
+            }
+
+            val secretKey = key as? SecretKey
+            if (secretKey == null) {
+                throw IllegalStateException("KEK is not a SecretKey. Keystore may be corrupted.")
+            }
+
+            // Validate WrappedKey components
+            if (wrapped.iv.isEmpty()) {
+                throw IllegalStateException("Stored key data is corrupted: IV is empty. Please re-import your SSH key.")
+            }
+            if (wrapped.tag.isEmpty()) {
+                throw IllegalStateException("Stored key data is corrupted: Authentication tag is empty. Please re-import your SSH key.")
+            }
+            if (wrapped.ciphertext.isEmpty()) {
+                throw IllegalStateException("Stored key data is corrupted: Ciphertext is empty. Please re-import your SSH key.")
+            }
+
+            android.util.Log.d("RexSsh", "WrappedKey validation: iv=${wrapped.iv.size} bytes, tag=${wrapped.tag.size} bytes, ciphertext=${wrapped.ciphertext.size} bytes")
+
             val cipher = Cipher.getInstance(AES_GCM_CIPHER)
             val gcmSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, wrapped.iv)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec)

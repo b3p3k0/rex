@@ -80,7 +80,7 @@ class SessionViewModel @Inject constructor(
     private var timerJob: Job? = null
     private var clipboardClearJob: Job? = null
     private val rawOutput = StringBuilder()
-    
+
     private fun buildDisplayOutput(): String {
         if (rawOutput.isEmpty()) return ""
 
@@ -96,6 +96,27 @@ class SessionViewModel @Inject constructor(
         val linesToShow = if (excess > 0) lines.takeLast(OUTPUT_LINE_LIMIT) else lines
         val body = linesToShow.joinToString("\n")
         return if (excess > 0) "... (+$excess more lines)\n$body" else body
+    }
+
+    private fun emitFinalState(
+        displayOutput: String,
+        exitCode: Int?,
+        allowCopy: Boolean,
+        errorMessage: String? = null
+    ) {
+        val newState = _uiState.value.copy(
+            isRunning = false,
+            exitCode = exitCode,
+            canCopy = allowCopy && displayOutput.isNotBlank(),
+            output = displayOutput,
+            error = errorMessage,
+            showOutputDialog = true
+        )
+        android.util.Log.d(
+            "RexSsh",
+            "emitFinalState: exitCode=${exitCode}, canCopy=${newState.canCopy}, showOutputDialog=${newState.showOutputDialog}, output=[${displayOutput.replace("\n", "\\n")}]"
+        )
+        _uiState.value = newState
     }
 
     fun startSession(mappingId: String) {
@@ -144,17 +165,56 @@ class SessionViewModel @Inject constructor(
                 )
 
                 // Authenticate based on auth method
+                android.util.Log.d("RexSsh", "Starting authentication with method: ${mapping.authMethod}")
                 when (mapping.authMethod.lowercase()) {
                     "key" -> {
+                        android.util.Log.d("RexSsh", "Key authentication selected")
                         if (mapping.keyBlobId.isNullOrBlank()) {
+                            android.util.Log.e("RexSsh", "Key authentication failed: no key blob ID")
                             _uiState.value = _uiState.value.copy(
                                 error = "Key authentication required but no key blob ID found"
                             )
                             return@launch
                         }
 
-                        val keyBytes = keyVault.decryptPrivateKey(KeyBlobId(mapping.keyBlobId))
-                        sshClient.authUsernameKey(mapping.username, keyBytes)
+                        android.util.Log.d("RexSsh", "About to decrypt private key with ID: ${mapping.keyBlobId}")
+                        val keyBytes = try {
+                            keyVault.decryptPrivateKey(KeyBlobId(mapping.keyBlobId))
+                        } catch (e: Exception) {
+                            android.util.Log.e("RexSsh", "Failed to decrypt private key: ${e.javaClass.simpleName}: ${e.message}", e)
+                            val userFriendlyMessage = when {
+                                e.message?.contains("device security changes") == true ->
+                                    "Private key access failed. Please unlock your device and try again."
+                                e.message?.contains("User not authenticated") == true ||
+                                e.message?.contains("SecurityGateRequiredException") == true ->
+                                    "Device authentication required. Please unlock your device."
+                                e.message?.contains("corrupted") == true ||
+                                e.message?.contains("Please re-import your SSH key") == true ->
+                                    "SSH key data is corrupted. Please re-import your SSH key."
+                                e.message?.contains("keystore") == true ->
+                                    "Keystore access failed. You may need to re-import your SSH key."
+                                e.message?.contains("Attempt to get length of null array") == true ->
+                                    "SSH key data is corrupted. Please re-import your SSH key."
+                                else -> "Failed to decrypt private key: ${e.message}"
+                            }
+                            _uiState.value = _uiState.value.copy(
+                                error = userFriendlyMessage
+                            )
+                            return@launch
+                        }
+                        android.util.Log.d("RexSsh", "Private key decrypted successfully, ${keyBytes.size} bytes")
+
+                        android.util.Log.d("RexSsh", "About to authenticate with SSH client")
+                        try {
+                            sshClient.authUsernameKey(mapping.username, keyBytes)
+                            android.util.Log.d("RexSsh", "SSH authentication completed successfully")
+                        } catch (e: Exception) {
+                            android.util.Log.e("RexSsh", "SSH authentication failed: ${e.javaClass.simpleName}: ${e.message}", e)
+                            _uiState.value = _uiState.value.copy(
+                                error = "SSH authentication failed: ${e.message}"
+                            )
+                            return@launch
+                        }
 
                         // TOFU fingerprint update: only after successful authentication
                         if (!mapping.strictHostKey && mapping.pinnedHostKeyFingerprint.isNullOrBlank()) {
@@ -181,10 +241,15 @@ class SessionViewModel @Inject constructor(
                 executionJob?.join()
 
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    error = "Session failed: ${e.message}",
-                    showOutputDialog = true
+                val allowCopy = settingsStore.allowCopyOutput.first()
+                val displayOutput = Redactor.redact(buildDisplayOutput())
+                emitFinalState(
+                    displayOutput = displayOutput,
+                    exitCode = null,
+                    allowCopy = allowCopy,
+                    errorMessage = "Session failed: ${e.message}"
                 )
+                rawOutput.clear()
             } finally {
                 sshClient.close()
                 stopTimer()
@@ -216,27 +281,84 @@ class SessionViewModel @Inject constructor(
                 val actualTimeout = if (timeoutMs > 0) timeoutMs else 30000
                 val exitCode = sshClient.waitExitCode(actualTimeout)
 
-                val allowCopy = settingsStore.allowCopyOutput.first()
-                val displayOutput = Redactor.redact(buildDisplayOutput())
-                _uiState.value = _uiState.value.copy(
-                    isRunning = false,
-                    exitCode = exitCode,
-                    canCopy = allowCopy && displayOutput.isNotBlank(),
-                    output = displayOutput,
-                    showOutputDialog = true
-                )
+                val rawDisplay = buildDisplayOutput()
+                android.util.Log.d("RexSsh", "buildDisplayOutput raw=[${rawDisplay.replace("\n", "\\n")}]")
+
+                android.util.Log.d("RexSsh", "About to call Redactor.redact")
+                val displayOutput = Redactor.redact(rawDisplay)
+                android.util.Log.d("RexSsh", "Redactor completed, displayOutput=[${displayOutput.replace("\n", "\\n")}]")
+
+                android.util.Log.d("RexSsh", "About to check allowCopyOutput setting")
+                val allowCopy = try {
+                    settingsStore.allowCopyOutput.first()
+                } catch (e: Exception) {
+                    android.util.Log.e("RexSsh", "Failed to get allowCopyOutput setting: ${e.message}", e)
+                    false // Default to false if settings access fails
+                }
+                android.util.Log.d("RexSsh", "allowCopyOutput=$allowCopy")
+
+                android.util.Log.d("RexSsh", "About to create new state")
+                val newState = try {
+                    _uiState.value.copy(
+                        isRunning = false,
+                        exitCode = exitCode,
+                        canCopy = allowCopy && displayOutput.isNotBlank(),
+                        output = displayOutput ?: "",
+                        error = null,
+                        showOutputDialog = true
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("RexSsh", "Failed to create new state: ${e.message}", e)
+                    // Fallback state
+                    SessionUiState(
+                        isRunning = false,
+                        exitCode = exitCode,
+                        canCopy = false,
+                        output = displayOutput ?: "",
+                        error = null,
+                        showOutputDialog = true
+                    )
+                }
+                android.util.Log.d("RexSsh", "New state created: $newState")
+
+                android.util.Log.d("RexSsh", "About to update _uiState.value")
+                try {
+                    _uiState.value = newState
+                    android.util.Log.d("RexSsh", "UI state updated successfully")
+                } catch (e: Exception) {
+                    android.util.Log.e("RexSsh", "Failed to update UI state: ${e.message}", e)
+                }
                 rawOutput.clear()
 
             } catch (e: Exception) {
-                val allowCopy = settingsStore.allowCopyOutput.first()
-                val displayOutput = Redactor.redact(buildDisplayOutput())
-                _uiState.value = _uiState.value.copy(
+                android.util.Log.e("RexSsh", "Exception in executeCommandWithTimeout: ${e.javaClass.simpleName}: ${e.message}", e)
+                val rawDisplay = buildDisplayOutput()
+                android.util.Log.d("RexSsh", "buildDisplayOutput (error) raw=[${rawDisplay.replace("\n", "\\n")}]")
+
+                val displayOutput = try {
+                    Redactor.redact(rawDisplay)
+                } catch (redactorException: Exception) {
+                    android.util.Log.e("RexSsh", "Redactor failed in error handler: ${redactorException.message}", redactorException)
+                    rawDisplay // Use raw display if redactor fails
+                }
+
+                val allowCopy = try {
+                    settingsStore.allowCopyOutput.first()
+                } catch (settingsException: Exception) {
+                    android.util.Log.e("RexSsh", "Settings access failed in error handler: ${settingsException.message}", settingsException)
+                    false
+                }
+
+                val newState = _uiState.value.copy(
                     isRunning = false,
-                    error = "Execution failed: ${e.message}",
+                    exitCode = null,
                     canCopy = allowCopy && displayOutput.isNotBlank(),
                     output = displayOutput,
+                    error = "Execution failed: ${e.message}",
                     showOutputDialog = true
                 )
+                android.util.Log.d("RexSsh", "emitFinalState error state=$newState")
+                _uiState.value = newState
                 rawOutput.clear()
             }
             // Note: cleanup handled by startSession's finally block
