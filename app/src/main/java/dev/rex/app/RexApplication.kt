@@ -24,6 +24,9 @@ import android.util.Log
 import dagger.hilt.android.HiltAndroidApp
 import dev.rex.app.core.SettingsInitializer
 import dev.rex.app.core.SshSecurityBootstrap
+import net.schmizz.sshj.common.SecurityUtils
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import java.security.Provider
 import java.security.Security
 import javax.inject.Inject
 
@@ -44,12 +47,24 @@ class RexApplication : Application() {
             Log.d("Rex", message)
         }
 
+        // Ensure we have the full BouncyCastle provider for SSHJ Ed25519 key parsing
+        var bc = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+        if (bc == null || bc.javaClass != BouncyCastleProvider::class.java) {
+            bc = BouncyCastleProvider()
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+            Security.addProvider(bc)
+        }
+
+        // Configure SSHJ to use our full BC provider
+        SecurityUtils.setSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
+        SecurityUtils.registerSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
+
         // TODO(claude): remove once SSH provisioning is stable
         val eddsaProvider = Security.getProvider("EdDSA")
-        val bcProvider = Security.getProvider("BC")
+        val sshjProvider = SecurityUtils.getSecurityProvider()
         Log.i(
             "Rex",
-            "Providers — EdDSA available: ${eddsaProvider != null}, BC provider: ${bcProvider?.javaClass?.name}, installed now: $providerWasInstalled"
+            "Providers — EdDSA available: ${eddsaProvider != null}, BC: ${bc.javaClass.name}, SSHJ active: ${sshjProvider?.javaClass?.name}, installed now: $providerWasInstalled"
         )
 
         // Force injection and initialization
