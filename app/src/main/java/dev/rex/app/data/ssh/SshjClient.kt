@@ -27,16 +27,19 @@ import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.userauth.UserAuthException
-import net.schmizz.sshj.userauth.keyprovider.FileKeyProvider
-import net.schmizz.sshj.userauth.keyprovider.KeyFormat
-import net.schmizz.sshj.userauth.keyprovider.KeyProviderUtil
-import net.schmizz.sshj.userauth.keyprovider.OpenSSHKeyFile
-import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
-import java.io.StringReader
+import net.i2p.crypto.eddsa.EdDSAPrivateKey
+import net.i2p.crypto.eddsa.EdDSAPublicKey
+import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable
+import net.i2p.crypto.eddsa.spec.EdDSAPrivateKeySpec
+import net.i2p.crypto.eddsa.spec.EdDSAPublicKeySpec
+import org.bouncycastle.asn1.ASN1OctetString
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
+import java.security.KeyPair
 import java.security.PublicKey
 import java.security.Security
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -159,36 +162,34 @@ class SshjClient @Inject constructor(
         val client = sshClient ?: throw IllegalStateException("Not connected")
 
         try {
-            // Decode PEM bytes to string once
             val pem = String(privateKeyPem, Charsets.UTF_8)
+            val pkcs8Bytes = decodePkcs8Pem(pem)
 
-            // Detect key format using StringReader (detection doesn't retain the reader)
-            val keyFormat = StringReader(pem).use { reader ->
-                KeyProviderUtil.detectKeyFileFormat(reader, /*failOnUnknown=*/true)
+            val privateKeyInfo = PrivateKeyInfo.getInstance(pkcs8Bytes)
+            val algorithmOid = privateKeyInfo.privateKeyAlgorithm.algorithm.id
+            if (algorithmOid != "1.3.101.112") {
+                throw RuntimeException("Unsupported private key algorithm: $algorithmOid")
             }
 
-            // Create appropriate key provider based on format
-            val keyProvider: FileKeyProvider = when (keyFormat) {
-                KeyFormat.PKCS8 -> PKCS8KeyFile()
-                KeyFormat.OpenSSH, KeyFormat.OpenSSHv1 -> OpenSSHKeyFile()
-                else -> throw RuntimeException("Unsupported private key format: $keyFormat")
+            val privateKeyOctets = ASN1OctetString.getInstance(privateKeyInfo.parsePrivateKey()).octets
+            if (privateKeyOctets.size != 32) {
+                throw RuntimeException("Invalid Ed25519 seed length: ${privateKeyOctets.size}")
             }
 
-            // Initialize provider with PEM string (SSHJ uses PrivateKeyStringResource internally)
-            keyProvider.init(pem, null as String?, null)
+            val edParams = EdDSANamedCurveTable.getByName("Ed25519")
+                ?: throw RuntimeException("Ed25519 curve parameters not found")
 
-            // Force early key parsing to catch bad PEM before auth
-            try {
-                keyProvider.public  // This forces SSHJ to parse the key
-            } catch (e: Exception) {
-                throw RuntimeException("Failed to parse private key", e)
-            }
+            val privateSpec = EdDSAPrivateKeySpec(privateKeyOctets, edParams)
+            val publicSpec = EdDSAPublicKeySpec(privateSpec.a, edParams)
 
-            // Authenticate using the private key
+            val edPrivateKey = EdDSAPrivateKey(privateSpec)
+            val edPublicKey = EdDSAPublicKey(publicSpec)
+
+            val keyPair = KeyPair(edPublicKey, edPrivateKey)
+            val keyProvider = client.loadKeys(keyPair)
+
             Log.i("RexSsh", "Attempting authPublickey for $username@$connectedHost")
             client.authPublickey(username, keyProvider)
-
-            // TODO(claude): remove once SSH provisioning is stable
             Log.i("RexSsh", "authPublickey succeeded for $username@$connectedHost")
 
         } catch (e: UserAuthException) {
@@ -252,10 +253,16 @@ class SshjClient @Inject constructor(
             // Read and emit actual command output
             var bytesRead: Int
             while (stdout.read(buffer).also { bytesRead = it } != -1) {
+                Log.d("RexSsh", "exec stream read: bytes=$bytesRead")
                 if (bytesRead > 0) {
-                    emit(buffer.copyOfRange(0, bytesRead).toByteString())
+                    val chunk = buffer.copyOfRange(0, bytesRead).toByteString()
+                    val printableChunk = chunk.utf8().replace("\n", "\\n")
+                    Log.d("RexSsh", "exec chunk bytes=[$printableChunk]")
+                    emit(chunk)
                 }
             }
+
+            Log.d("RexSsh", "exec stream completed for $connectedHost")
 
         } catch (e: Exception) {
             // Clean up session on any failure
@@ -279,7 +286,9 @@ class SshjClient @Inject constructor(
 
             // Get the actual exit status from the command
             // Return -1 if null as documented
-            command.exitStatus ?: -1
+            val exitStatus = command.exitStatus ?: -1
+            Log.d("RexSsh", "waitExitCode completed for $connectedHost with status=$exitStatus")
+            exitStatus
 
         } catch (e: Exception) {
             val (error, message) = ErrorMapper.mapSshException(e)
@@ -288,7 +297,15 @@ class SshjClient @Inject constructor(
             cleanupSession()
         }
     }
-    
+
+    private fun decodePkcs8Pem(pem: String): ByteArray {
+        val sanitized = pem
+            .replace("-----BEGIN PRIVATE KEY-----", "")
+            .replace("-----END PRIVATE KEY-----", "")
+            .replace("\\s".toRegex(), "")
+        return Base64.getDecoder().decode(sanitized)
+    }
+
     override suspend fun cancel() {
         try {
             cleanupSession()

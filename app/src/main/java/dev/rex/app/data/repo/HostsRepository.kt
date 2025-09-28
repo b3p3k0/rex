@@ -89,6 +89,24 @@ class HostsRepository @Inject constructor(
             hostsDao.updateHost(updatedHost)
         }
     }
+
+    suspend fun updateHostUsername(hostId: String, username: String): Boolean = withContext(ioDispatcher) {
+        val host = hostsDao.getHostById(hostId) ?: return@withContext false
+
+        val sanitized = username.filterNot { it == '\n' || it == '\r' }.trim()
+
+        // Log warning if sanitization removed characters for audit trail
+        if (sanitized != username) {
+            Log.w("Rex", "Sanitized username for host $hostId: removed whitespace/newlines")
+        }
+
+        val updatedHost = host.copy(
+            username = sanitized,
+            updatedAt = System.currentTimeMillis()
+        )
+        hostsDao.updateHost(updatedHost)
+        true
+    }
     
     suspend fun deleteHost(host: HostEntity) = withContext(ioDispatcher) { 
         hostsDao.deleteHost(host) 

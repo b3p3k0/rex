@@ -55,6 +55,7 @@ class RexApplication : Application() {
         }
 
         // Configure SSHJ to use our full BC provider
+        SecurityUtils.registerSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
         SecurityUtils.setSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
 
         // TODO(claude): remove once SSH provisioning is stable

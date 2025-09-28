@@ -24,6 +24,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.rex.app.core.Gatekeeper
+import dev.rex.app.core.GlobalCEH
 import dev.rex.app.core.SecurityGateRequiredException
 import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.crypto.KeyBlobId
@@ -85,6 +86,10 @@ data class HostDetailUiState(
     val pendingAction: HostSecurityAction? = null,
     val securityGateTitle: String = "",
     val securityGateSubtitle: String = "",
+    val showUsernameEditor: Boolean = false,
+    val editedUsername: String = "",
+    val usernameError: String? = null,
+    val isUpdatingUsername: Boolean = false,
     val snackbarMessage: String? = null,
     val error: String? = null
 )
@@ -438,6 +443,79 @@ class HostDetailViewModel @Inject constructor(
             securityGateSubtitle = "",
             snackbarMessage = "Authentication cancelled"
         )
+    }
+
+    fun showUsernameEditor() {
+        val currentHost = _uiState.value.host
+        _uiState.value = _uiState.value.copy(
+            showUsernameEditor = true,
+            editedUsername = currentHost?.username?.trim() ?: "",
+            usernameError = null
+        )
+    }
+
+    fun dismissUsernameEditor() {
+        if (!_uiState.value.isUpdatingUsername) {
+            _uiState.value = _uiState.value.copy(showUsernameEditor = false)
+        }
+    }
+
+    fun updateEditedUsername(input: String) {
+        val sanitized = input.filterNot { it == '\n' || it == '\r' }
+        _uiState.value = _uiState.value.copy(
+            editedUsername = sanitized,
+            usernameError = if (sanitized.isBlank()) "Username is required" else null
+        )
+    }
+
+    fun saveEditedUsername() {
+        val currentState = _uiState.value
+        val currentHost = currentState.host
+
+        if (currentHost == null) {
+            _uiState.value = currentState.copy(
+                usernameError = "Host record not found"
+            )
+            return
+        }
+
+        if (currentState.editedUsername.isBlank() || currentState.usernameError != null) {
+            return
+        }
+
+        _uiState.value = currentState.copy(isUpdatingUsername = true)
+
+        viewModelScope.launch(GlobalCEH.handler) {
+            try {
+                val success = hostsRepository.updateHostUsername(hostId, currentState.editedUsername)
+
+                if (success) {
+                    // Update the cached host immediately
+                    val updatedHost = currentHost.copy(
+                        username = currentState.editedUsername.trim(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+
+                    _uiState.value = _uiState.value.copy(
+                        host = updatedHost,
+                        showUsernameEditor = false,
+                        isUpdatingUsername = false,
+                        snackbarMessage = "Username updated"
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        usernameError = "Failed to update username: host not found",
+                        isUpdatingUsername = false
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("Rex", "Failed to update username", e)
+                _uiState.value = _uiState.value.copy(
+                    usernameError = "Failed to update username",
+                    isUpdatingUsername = false
+                )
+            }
+        }
     }
 
     private fun executeAction(action: HostSecurityAction) {

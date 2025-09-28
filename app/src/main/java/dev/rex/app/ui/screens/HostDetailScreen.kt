@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -164,7 +165,10 @@ fun HostDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     uiState.host?.let { host ->
-                        HostInfoCard(host = host)
+                        HostInfoCard(
+                            host = host,
+                            onEditUsername = viewModel::showUsernameEditor
+                        )
                         KeyManagementCard(
                             uiState = uiState,
                             onGenerateKey = viewModel::generateNewKey,
@@ -234,6 +238,18 @@ fun HostDetailScreen(
         )
     }
 
+    // Edit Username Dialog
+    if (uiState.showUsernameEditor) {
+        EditUsernameDialog(
+            username = uiState.editedUsername,
+            error = uiState.usernameError,
+            isUpdating = uiState.isUpdatingUsername,
+            onDismiss = viewModel::dismissUsernameEditor,
+            onUsernameChange = viewModel::updateEditedUsername,
+            onSave = viewModel::saveEditedUsername
+        )
+    }
+
     // Security gate overlay
     if (uiState.showSecurityGate) {
         SecurityGate(
@@ -247,7 +263,10 @@ fun HostDetailScreen(
 }
 
 @Composable
-private fun HostInfoCard(host: dev.rex.app.data.db.HostEntity) {
+private fun HostInfoCard(
+    host: dev.rex.app.data.db.HostEntity,
+    onEditUsername: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -272,16 +291,32 @@ private fun HostInfoCard(host: dev.rex.app.data.db.HostEntity) {
                 )
             }
 
-            Row {
-                Text(
-                    text = "Username: ",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = host.username,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row {
+                    Text(
+                        text = "Username: ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = host.username,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                IconButton(
+                    onClick = onEditUsername,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "Edit username",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
 
             Row {
@@ -815,6 +850,76 @@ private fun DeleteKeyDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EditUsernameDialog(
+    username: String,
+    error: String?,
+    isUpdating: Boolean,
+    onDismiss: () -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onSave: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = if (isUpdating) { {} } else onDismiss,
+        title = { Text("Edit Username") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Enter the SSH username for this host:")
+
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { input ->
+                        onUsernameChange(input.filterNot { it == '\n' || it == '\r' })
+                    },
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Done,
+                        capitalization = KeyboardCapitalization.None
+                    ),
+                    isError = error != null,
+                    enabled = !isUpdating
+                )
+
+                error?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSave,
+                enabled = !isUpdating && username.isNotBlank() && error == null
+            ) {
+                if (isUpdating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Save")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isUpdating
+            ) {
                 Text("Cancel")
             }
         }

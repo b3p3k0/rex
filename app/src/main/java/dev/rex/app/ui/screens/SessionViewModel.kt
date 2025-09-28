@@ -52,7 +52,8 @@ data class SessionUiState(
     val canCopy: Boolean = false,
     val error: String? = null,
     val hostNickname: String = "",
-    val commandName: String = ""
+    val commandName: String = "",
+    val showOutputDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -68,6 +69,10 @@ class SessionViewModel @Inject constructor(
     private val hostsRepository: HostsRepository
 ) : ViewModel() {
 
+    companion object {
+        private const val OUTPUT_LINE_LIMIT = 128
+    }
+
     private val _uiState = MutableStateFlow(SessionUiState())
     val uiState: StateFlow<SessionUiState> = _uiState.asStateFlow()
 
@@ -75,6 +80,23 @@ class SessionViewModel @Inject constructor(
     private var timerJob: Job? = null
     private var clipboardClearJob: Job? = null
     private val rawOutput = StringBuilder()
+    
+    private fun buildDisplayOutput(): String {
+        if (rawOutput.isEmpty()) return ""
+
+        val normalized = rawOutput.toString().replace("\r\n", "\n")
+        var lines = normalized.lines()
+        if (lines.isNotEmpty() && lines.last().isEmpty()) {
+            lines = lines.dropLast(1)
+        }
+
+        if (lines.isEmpty()) return ""
+
+        val excess = (lines.size - OUTPUT_LINE_LIMIT).coerceAtLeast(0)
+        val linesToShow = if (excess > 0) lines.takeLast(OUTPUT_LINE_LIMIT) else lines
+        val body = linesToShow.joinToString("\n")
+        return if (excess > 0) "... (+$excess more lines)\n$body" else body
+    }
 
     fun startSession(mappingId: String) {
         // Cancel any in-flight execution job to prevent double-tap races
@@ -99,7 +121,8 @@ class SessionViewModel @Inject constructor(
                     exitCode = null,
                     elapsedTimeMs = 0,
                     error = null,
-                    canCopy = false
+                    canCopy = false,
+                    showOutputDialog = false
                 )
 
                 // Check if command is dangerous and require gate
@@ -120,11 +143,6 @@ class SessionViewModel @Inject constructor(
                     expectedPin = expectedPin
                 )
 
-                // TOFU fingerprint update: if no strict host key and no stored fingerprint
-                if (!mapping.strictHostKey && mapping.pinnedHostKeyFingerprint.isNullOrBlank()) {
-                    hostsRepository.updateHostFingerprint(mapping.id, actualPin.sha256)
-                }
-
                 // Authenticate based on auth method
                 when (mapping.authMethod.lowercase()) {
                     "key" -> {
@@ -137,8 +155,14 @@ class SessionViewModel @Inject constructor(
 
                         val keyBytes = keyVault.decryptPrivateKey(KeyBlobId(mapping.keyBlobId))
                         sshClient.authUsernameKey(mapping.username, keyBytes)
+
+                        // TOFU fingerprint update: only after successful authentication
+                        if (!mapping.strictHostKey && mapping.pinnedHostKeyFingerprint.isNullOrBlank()) {
+                            hostsRepository.updateHostFingerprint(mapping.id, actualPin.sha256)
+                        }
                     }
                     "password" -> {
+                        // TODO: Implement password authentication support
                         _uiState.value = _uiState.value.copy(
                             error = "Password authentication is not yet supported"
                         )
@@ -152,12 +176,14 @@ class SessionViewModel @Inject constructor(
                     }
                 }
 
-                // Execute the command
+                // Execute the command and wait for completion before closing the client
                 executeCommandWithTimeout(mapping.command, mapping.allowPty, mapping.defaultTimeoutMs)
+                executionJob?.join()
 
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    error = "Session failed: ${e.message}"
+                    error = "Session failed: ${e.message}",
+                    showOutputDialog = true
                 )
             } finally {
                 sshClient.close()
@@ -170,7 +196,9 @@ class SessionViewModel @Inject constructor(
         if (_uiState.value.isRunning) return
 
         _uiState.value = _uiState.value.copy(
-            isRunning = true
+            isRunning = true,
+            showOutputDialog = false,
+            output = ""
         )
 
         rawOutput.clear()
@@ -182,13 +210,6 @@ class SessionViewModel @Inject constructor(
                 sshClient.exec(command, pty).collect { byteString ->
                     val text = byteString.utf8()
                     rawOutput.append(text)
-
-                    // Apply redaction before displaying
-                    val redactedOutput = Redactor.redact(rawOutput.toString())
-
-                    _uiState.value = _uiState.value.copy(
-                        output = redactedOutput
-                    )
                 }
 
                 // Wait for exit code with timeout from mapping or default
@@ -196,22 +217,29 @@ class SessionViewModel @Inject constructor(
                 val exitCode = sshClient.waitExitCode(actualTimeout)
 
                 val allowCopy = settingsStore.allowCopyOutput.first()
+                val displayOutput = Redactor.redact(buildDisplayOutput())
                 _uiState.value = _uiState.value.copy(
                     isRunning = false,
                     exitCode = exitCode,
-                    canCopy = allowCopy && exitCode == 0 // Only allow copy on success
+                    canCopy = allowCopy && displayOutput.isNotBlank(),
+                    output = displayOutput,
+                    showOutputDialog = true
                 )
+                rawOutput.clear()
 
             } catch (e: Exception) {
+                val allowCopy = settingsStore.allowCopyOutput.first()
+                val displayOutput = Redactor.redact(buildDisplayOutput())
                 _uiState.value = _uiState.value.copy(
                     isRunning = false,
                     error = "Execution failed: ${e.message}",
-                    canCopy = false
+                    canCopy = allowCopy && displayOutput.isNotBlank(),
+                    output = displayOutput,
+                    showOutputDialog = true
                 )
-            } finally {
-                stopTimer()
                 rawOutput.clear()
             }
+            // Note: cleanup handled by startSession's finally block
         }
     }
 
@@ -235,6 +263,14 @@ class SessionViewModel @Inject constructor(
             stopTimer()
             rawOutput.clear()
         }
+    }
+
+    fun showOutputDialog() {
+        _uiState.value = _uiState.value.copy(showOutputDialog = true)
+    }
+
+    fun dismissOutputDialog() {
+        _uiState.value = _uiState.value.copy(showOutputDialog = false)
     }
 
     fun copyOutput() {
