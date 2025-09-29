@@ -19,6 +19,8 @@
 package dev.rex.app.ui.screens
 
 import android.util.Log
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -27,9 +29,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -37,21 +38,25 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.rex.app.R
 import dev.rex.app.data.db.HostCommandMapping
 import dev.rex.app.data.db.HostCommandRow
 import dev.rex.app.ui.components.AboutDialog
 import dev.rex.app.ui.components.HostCommandRow as HostCommandRowComponent
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainTableScreen(
     onNavigateToAddHost: () -> Unit,
@@ -133,24 +138,6 @@ fun MainTableScreen(
             TopAppBar(
                 title = { Text("Rex") },
                 actions = {
-                    IconButton(
-                        onClick = { showAbout = true },
-                        modifier = Modifier.semantics {
-                            contentDescription = "Open about dialog"
-                        }
-                    ) {
-                        Icon(Icons.Filled.HelpOutline, contentDescription = "Open about dialog")
-                    }
-
-                    IconButton(
-                        onClick = onNavigateToSettings,
-                        modifier = Modifier.semantics {
-                            contentDescription = "Settings"
-                        }
-                    ) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                    }
-
                     Box {
                         IconButton(
                             onClick = { showOverflowMenu = true },
@@ -166,7 +153,39 @@ fun MainTableScreen(
                             onDismissRequest = { showOverflowMenu = false }
                         ) {
                             DropdownMenuItem(
+                                text = { Text("Settings") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Settings,
+                                        contentDescription = "Settings"
+                                    )
+                                },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    onNavigateToSettings()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("About") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Info,
+                                        contentDescription = "About"
+                                    )
+                                },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    showAbout = true
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Logs") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Description,
+                                        contentDescription = "Logs"
+                                    )
+                                },
                                 onClick = {
                                     showOverflowMenu = false
                                     onNavigateToLogs()
@@ -396,6 +415,7 @@ fun MainTableScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HostRowItem(
     hostRow: HostCommandRow,
@@ -412,6 +432,8 @@ private fun HostRowItem(
 ) {
     Log.d("Rex", "HostRowItem: ${hostRow.hostNickname} with ${commands.size} commands")
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showHostActionsDialog by remember { mutableStateOf(false) }
+    val hapticFeedback = LocalHapticFeedback.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -419,9 +441,23 @@ private fun HostRowItem(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Host header row with action buttons
+            // Host header row with long-press actions
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onLongClick = {
+                            if (enableHapticFeedback) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            showHostActionsDialog = true
+                        },
+                        onClick = {} // No click action, only long press
+                    )
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "Host: ${hostRow.hostNickname}. Long press for actions."
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -433,27 +469,6 @@ private fun HostRowItem(
                             contentDescription = "Host: ${hostRow.hostNickname}"
                         }
                     )
-                }
-                Row {
-                    IconButton(
-                        onClick = { onNavigateToHostDetail(hostRow.hostId) }
-                    ) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Manage SSH keys for ${hostRow.hostNickname}"
-                        )
-                    }
-                    IconButton(
-                        onClick = { showDeleteConfirm = true },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete host ${hostRow.hostNickname}"
-                        )
-                    }
                 }
             }
             
@@ -517,7 +532,51 @@ private fun HostRowItem(
             }
         }
     }
-    
+
+    // Host Actions Dialog
+    if (showHostActionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showHostActionsDialog = false },
+            title = { Text("Host Actions") },
+            text = {
+                Text("Choose an action for \"${hostRow.hostNickname}\":")
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            showHostActionsDialog = false
+                            onNavigateToHostDetail(hostRow.hostId)
+                        }
+                    ) {
+                        Text("Manage keys")
+                    }
+
+                    TextButton(
+                        onClick = {
+                            showHostActionsDialog = false
+                            showDeleteConfirm = true
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Delete host")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showHostActionsDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Confirmation Dialog
     if (showDeleteConfirm) {
         AlertDialog(
