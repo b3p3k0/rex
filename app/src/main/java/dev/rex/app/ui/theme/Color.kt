@@ -20,6 +20,35 @@ package dev.rex.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+// Light theme colors
+val LightPrimary = Color(0xFF22C55E)
+val LightOnPrimary = Color(0xFF05250F)
+val LightSecondary = Color(0xFF7C3AED)
+val LightOnSecondary = Color(0xFFF5F3FF)
+val LightTertiary = Color(0xFFDAA520)
+val LightOnTertiary = Color(0xFF2D2201)
+val LightBackground = Color(0xFFF8FAFC)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFE2E8F0)
+val LightOnBackground = Color(0xFF0F172A)
+val LightOnSurface = Color(0xFF0F172A)
+val LightOnSurfaceVariant = Color(0xFF475569)
+
+// Dark theme colors
+val DarkPrimary = Color(0xFF34D399)
+val DarkOnPrimary = Color(0xFF05250F)
+val DarkSecondary = Color(0xFF8B5CF6)
+val DarkOnSecondary = Color(0xFFF5F3FF)
+val DarkTertiary = Color(0xFFF4B400)
+val DarkOnTertiary = Color(0xFF2D2201)
+val DarkBackground = Color(0xFF0B1120)
+val DarkSurface = Color(0xFF111827)
+val DarkSurfaceVariant = Color(0xFF1F2937)
+val DarkOnBackground = Color(0xFFE2E8F0)
+val DarkOnSurface = Color(0xFFE2E8F0)
+val DarkOnSurfaceVariant = Color(0xFF94A3B8)
+
+// Legacy colors (maintained for backward compatibility)
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
 val Pink80 = Color(0xFFEFB8C8)

@@ -25,6 +25,9 @@ import dev.rex.app.core.GlobalCEH
 import dev.rex.app.core.SecurityManager
 import dev.rex.app.data.settings.SettingsStore
 import dev.rex.app.data.settings.SettingsData
+import dev.rex.app.data.settings.ThemeMode
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -36,6 +39,17 @@ class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val securityManager: SecurityManager
 ) : ViewModel() {
+
+    init {
+        // Keep in-memory gate TTL aligned with persisted value on startup and subsequent changes.
+        viewModelScope.launch(GlobalCEH.handler) {
+            settingsStore.credentialGateTtlMinutes
+                .distinctUntilChanged()
+                .collect { minutes ->
+                securityManager.setGateTtlMinutes(minutes)
+            }
+        }
+    }
 
     val settingsData: StateFlow<SettingsData> = settingsStore.allSettings
         .stateIn(
@@ -49,7 +63,8 @@ class SettingsViewModel @Inject constructor(
                 logRetentionCount = SettingsStore.DEFAULT_LOG_RETENTION_COUNT,
                 logRetentionAgeDays = SettingsStore.DEFAULT_LOG_RETENTION_AGE_DAYS,
                 logRetentionSizeMb = SettingsStore.DEFAULT_LOG_RETENTION_SIZE_MB,
-                hapticFeedbackLongPress = SettingsStore.DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS
+                hapticFeedbackLongPress = SettingsStore.DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS,
+                themeMode = SettingsStore.DEFAULT_THEME_MODE
             )
         )
 
@@ -100,6 +115,12 @@ class SettingsViewModel @Inject constructor(
     fun setHapticFeedbackLongPress(enabled: Boolean) {
         viewModelScope.launch(GlobalCEH.handler) {
             settingsStore.setHapticFeedbackLongPress(enabled)
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch(GlobalCEH.handler) {
+            settingsStore.setThemeMode(mode)
         }
     }
 }

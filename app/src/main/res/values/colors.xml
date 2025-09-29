@@ -1,11 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Material3 seed color system -->
-    <color name="rex_seed">#6750A4</color>
-    
-    <!-- Core Material3 colors -->
-    <color name="primary">#6750A4</color>
-    <color name="onPrimary">#FFFFFF</color>
-    <color name="background">#FFFBFE</color>
-    <color name="surface">#FFFBFE</color>
+    <!-- Light theme colors -->
+    <color name="light_primary">#22C55E</color>
+    <color name="light_on_primary">#05250F</color>
+    <color name="light_secondary">#7C3AED</color>
+    <color name="light_on_secondary">#F5F3FF</color>
+    <color name="light_tertiary">#DAA520</color>
+    <color name="light_on_tertiary">#2D2201</color>
+    <color name="light_background">#F8FAFC</color>
+    <color name="light_surface">#FFFFFF</color>
+    <color name="light_surface_variant">#E2E8F0</color>
+    <color name="light_on_background">#0F172A</color>
+    <color name="light_on_surface">#0F172A</color>
+    <color name="light_on_surface_variant">#475569</color>
+
+    <!-- Dark theme colors -->
+    <color name="dark_primary">#34D399</color>
+    <color name="dark_on_primary">#05250F</color>
+    <color name="dark_secondary">#8B5CF6</color>
+    <color name="dark_on_secondary">#F5F3FF</color>
+    <color name="dark_tertiary">#F4B400</color>
+    <color name="dark_on_tertiary">#2D2201</color>
+    <color name="dark_background">#0B1120</color>
+    <color name="dark_surface">#111827</color>
+    <color name="dark_surface_variant">#1F2937</color>
+    <color name="dark_on_background">#E2E8F0</color>
+    <color name="dark_on_surface">#E2E8F0</color>
+    <color name="dark_on_surface_variant">#94A3B8</color>
+
+    <!-- Default colors for Material3 system -->
+    <color name="primary">@color/light_primary</color>
+    <color name="on_primary">@color/light_on_primary</color>
+    <color name="background">@color/light_background</color>
+    <color name="surface">@color/light_surface</color>
+    <color name="on_background">@color/light_on_background</color>
+    <color name="on_surface">@color/light_on_surface</color>
+
+    <!-- Legacy seed color -->
+    <color name="rex_seed">#22C55E</color>
 </resources>

@@ -24,6 +24,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -31,6 +32,23 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "security_settings")
+
+/**
+ * Theme mode options for the application
+ */
+enum class ThemeMode {
+    SYSTEM, LIGHT, DARK;
+
+    companion object {
+        fun fromString(value: String?): ThemeMode {
+            return when (value) {
+                "LIGHT" -> LIGHT
+                "DARK" -> DARK
+                else -> SYSTEM
+            }
+        }
+    }
+}
 
 /**
  * Security-related settings using DataStore for persistence
@@ -49,6 +67,7 @@ class SettingsStore @Inject constructor(
         private val LOG_RETENTION_AGE_DAYS = intPreferencesKey("log_retention_age_days")
         private val LOG_RETENTION_SIZE_MB = intPreferencesKey("log_retention_size_mb")
         private val HAPTIC_FEEDBACK_LONG_PRESS = booleanPreferencesKey("haptic_feedback_long_press")
+        private val THEME_MODE = stringPreferencesKey("theme_mode")
 
         // Default values
         const val DEFAULT_SCREEN_CAPTURE_PROTECTION = true
@@ -59,6 +78,7 @@ class SettingsStore @Inject constructor(
         const val DEFAULT_LOG_RETENTION_AGE_DAYS = 30
         const val DEFAULT_LOG_RETENTION_SIZE_MB = 50
         const val DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS = true
+        val DEFAULT_THEME_MODE = ThemeMode.SYSTEM
     }
 
     /**
@@ -179,6 +199,20 @@ class SettingsStore @Inject constructor(
     }
 
     /**
+     * Theme mode setting
+     */
+    val themeMode: Flow<ThemeMode> = context.dataStore.data
+        .map { preferences ->
+            ThemeMode.fromString(preferences[THEME_MODE])
+        }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.dataStore.edit { preferences ->
+            preferences[THEME_MODE] = mode.name
+        }
+    }
+
+    /**
      * Get all settings as a data class for easier access
      */
     val allSettings: Flow<SettingsData> = context.dataStore.data
@@ -191,7 +225,8 @@ class SettingsStore @Inject constructor(
                 logRetentionCount = preferences[LOG_RETENTION_COUNT] ?: DEFAULT_LOG_RETENTION_COUNT,
                 logRetentionAgeDays = preferences[LOG_RETENTION_AGE_DAYS] ?: DEFAULT_LOG_RETENTION_AGE_DAYS,
                 logRetentionSizeMb = preferences[LOG_RETENTION_SIZE_MB] ?: DEFAULT_LOG_RETENTION_SIZE_MB,
-                hapticFeedbackLongPress = preferences[HAPTIC_FEEDBACK_LONG_PRESS] ?: DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS
+                hapticFeedbackLongPress = preferences[HAPTIC_FEEDBACK_LONG_PRESS] ?: DEFAULT_HAPTIC_FEEDBACK_LONG_PRESS,
+                themeMode = ThemeMode.fromString(preferences[THEME_MODE])
             )
         }
 }
@@ -207,5 +242,6 @@ data class SettingsData(
     val logRetentionCount: Int,
     val logRetentionAgeDays: Int,
     val logRetentionSizeMb: Int,
-    val hapticFeedbackLongPress: Boolean
+    val hapticFeedbackLongPress: Boolean,
+    val themeMode: ThemeMode
 )

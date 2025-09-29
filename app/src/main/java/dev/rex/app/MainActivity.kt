@@ -49,7 +49,10 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         Log.i("Rex", "MainActivity created")
         setContent {
-            RexTheme {
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val settingsData by settingsViewModel.settingsData.collectAsStateWithLifecycle()
+
+            RexTheme(themeMode = settingsData.themeMode) {
                 // Apply screen capture protection based on settings
                 ApplyScreenProtection()
 

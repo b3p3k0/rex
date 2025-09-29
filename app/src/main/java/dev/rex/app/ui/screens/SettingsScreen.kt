@@ -21,6 +21,8 @@ package dev.rex.app.ui.screens
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -30,9 +32,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.rex.app.data.settings.ThemeMode
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,13 +105,19 @@ fun SettingsScreen(
                         onCheckedChange = viewModel::setHapticFeedbackLongPress
                     )
 
+                    ThemeSelector(
+                        title = "Theme",
+                        subtitle = "Choose app appearance",
+                        selectedMode = settingsData.themeMode,
+                        onModeSelected = viewModel::setThemeMode
+                    )
+
                     SettingSlider(
                         title = "Credential Gate TTL",
                         subtitle = "Minutes before re-authentication required",
                         value = settingsData.credentialGateTtlMinutes,
                         valueRange = 1f..60f,
-                        steps = 58,
-                        onValueChange = { viewModel.setCredentialGateTtlMinutes(it.toInt()) },
+                        onValueChange = viewModel::setCredentialGateTtlMinutes,
                         valueText = "${settingsData.credentialGateTtlMinutes} min"
                     )
 
@@ -115,8 +126,7 @@ fun SettingsScreen(
                         subtitle = "Default timeout for command execution",
                         value = settingsData.defaultCommandTimeoutSeconds,
                         valueRange = 10f..300f,
-                        steps = 29,
-                        onValueChange = { viewModel.setDefaultCommandTimeoutSeconds(it.toInt()) },
+                        onValueChange = viewModel::setDefaultCommandTimeoutSeconds,
                         valueText = "${settingsData.defaultCommandTimeoutSeconds}s"
                     )
                 }
@@ -138,8 +148,7 @@ fun SettingsScreen(
                         subtitle = "Maximum number of log entries to keep",
                         value = settingsData.logRetentionCount,
                         valueRange = 100f..5000f,
-                        steps = 49,
-                        onValueChange = { viewModel.setLogRetentionCount(it.toInt()) },
+                        onValueChange = viewModel::setLogRetentionCount,
                         valueText = "${settingsData.logRetentionCount} entries"
                     )
 
@@ -148,8 +157,7 @@ fun SettingsScreen(
                         subtitle = "Maximum age of log entries in days",
                         value = settingsData.logRetentionAgeDays,
                         valueRange = 1f..90f,
-                        steps = 88,
-                        onValueChange = { viewModel.setLogRetentionAgeDays(it.toInt()) },
+                        onValueChange = viewModel::setLogRetentionAgeDays,
                         valueText = "${settingsData.logRetentionAgeDays} days"
                     )
 
@@ -158,8 +166,7 @@ fun SettingsScreen(
                         subtitle = "Maximum total size of logs in MB",
                         value = settingsData.logRetentionSizeMb,
                         valueRange = 10f..200f,
-                        steps = 19,
-                        onValueChange = { viewModel.setLogRetentionSizeMb(it.toInt()) },
+                        onValueChange = viewModel::setLogRetentionSizeMb,
                         valueText = "${settingsData.logRetentionSizeMb} MB"
                     )
                 }
@@ -206,10 +213,14 @@ private fun SettingSlider(
     subtitle: String,
     value: Int,
     valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    onValueChange: (Float) -> Unit,
+    onValueChange: (Int) -> Unit,
     valueText: String
 ) {
+    var lastDispatched by remember { mutableStateOf(value) }
+    LaunchedEffect(value) {
+        lastDispatched = value
+    }
+
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -237,9 +248,70 @@ private fun SettingSlider(
         }
         Slider(
             value = value.toFloat(),
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            steps = steps
+            onValueChange = { raw ->
+                val min = valueRange.start.roundToInt()
+                val max = valueRange.endInclusive.roundToInt()
+                val rounded = raw.roundToInt().coerceIn(min, max)
+                if (rounded != lastDispatched) {
+                    lastDispatched = rounded
+                    onValueChange(rounded)
+                }
+            },
+            valueRange = valueRange
         )
+    }
+}
+
+@Composable
+private fun ThemeSelector(
+    title: String,
+    subtitle: String,
+    selectedMode: ThemeMode,
+    onModeSelected: (ThemeMode) -> Unit
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup()
+                .semantics { contentDescription = "Theme selection" },
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ThemeMode.values().forEach { mode ->
+                val isSelected = selectedMode == mode
+                val label = when (mode) {
+                    ThemeMode.SYSTEM -> "System"
+                    ThemeMode.LIGHT -> "Light"
+                    ThemeMode.DARK -> "Dark"
+                }
+
+                FilterChip(
+                    onClick = { onModeSelected(mode) },
+                    label = { Text(label) },
+                    selected = isSelected,
+                    modifier = Modifier
+                        .selectable(
+                            selected = isSelected,
+                            onClick = { onModeSelected(mode) },
+                            role = Role.RadioButton
+                        )
+                        .semantics {
+                            contentDescription = "$label theme mode"
+                        }
+                )
+            }
+        }
     }
 }
