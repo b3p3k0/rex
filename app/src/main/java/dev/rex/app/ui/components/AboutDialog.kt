@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
@@ -42,6 +43,12 @@ fun AboutDialog(onDismiss: () -> Unit) {
     val githubUrl = stringResource(R.string.about_github_url)
     val redditUrl = stringResource(R.string.about_reddit_url)
 
+    val linkStyle = SpanStyle(
+        color = MaterialTheme.colorScheme.primary,
+        textDecoration = TextDecoration.Underline,
+        fontWeight = FontWeight.Medium
+    )
+
     val bodyText = buildAnnotatedString {
         append(stringResource(R.string.about_line1))
         append("\n\n")
@@ -50,11 +57,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
 
         append(stringResource(R.string.about_repo_prefix))
         pushStringAnnotation("url", githubUrl)
-        withStyle(SpanStyle(
-            color = MaterialTheme.colorScheme.primary,
-            textDecoration = TextDecoration.Underline,
-            fontWeight = FontWeight.Medium
-        )) {
+        withStyle(linkStyle) {
             append(stringResource(R.string.about_github_label))
         }
         pop()
@@ -62,22 +65,21 @@ fun AboutDialog(onDismiss: () -> Unit) {
         append("\n")
         append(stringResource(R.string.about_chat_prefix))
         pushStringAnnotation("url", redditUrl)
-        withStyle(SpanStyle(
-            color = MaterialTheme.colorScheme.primary,
-            textDecoration = TextDecoration.Underline,
-            fontWeight = FontWeight.Medium
-        )) {
+        withStyle(linkStyle) {
             append(stringResource(R.string.about_reddit_label))
         }
         pop()
     }
 
-    val footerText = "${stringResource(R.string.about_license)} ${stringResource(R.string.about_version_fmt, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)}"
+    val footerText = "${stringResource(R.string.about_license)} ${stringResource(R.string.about_version_fmt, BuildConfig.VERSION_NAME)}"
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(stringResource(R.string.about_title))
+            Text(
+                text = stringResource(R.string.about_title),
+                style = MaterialTheme.typography.titleLarge.copy(fontStyle = FontStyle.Italic)
+            )
         },
         text = {
             Column(

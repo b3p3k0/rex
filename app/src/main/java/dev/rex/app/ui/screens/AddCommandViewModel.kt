@@ -27,9 +27,11 @@ import dev.rex.app.core.GlobalCEH
 import dev.rex.app.data.db.CommandEntity
 import dev.rex.app.data.repo.CommandsRepository
 import dev.rex.app.data.repo.HostsRepository
+import dev.rex.app.data.settings.SettingsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -56,7 +58,8 @@ data class AddCommandUiState(
 class AddCommandViewModel @Inject constructor(
     private val commandsRepository: CommandsRepository,
     private val hostsRepository: HostsRepository,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val settingsStore: SettingsStore
 ) : ViewModel() {
 
     private val hostId: String = savedStateHandle.get<String>("hostId") ?: ""
@@ -133,12 +136,16 @@ class AddCommandViewModel @Inject constructor(
 
         viewModelScope.launch(GlobalCEH.handler) {
             try {
+                val defaultTimeoutSeconds = runCatching {
+                    settingsStore.defaultCommandTimeoutSeconds.first()
+                }.getOrElse { SettingsStore.DEFAULT_COMMAND_TIMEOUT_SECONDS }
+
                 val command = CommandEntity(
                     id = UUID.randomUUID().toString(),
                     name = currentState.name.trim(),
                     command = currentState.command.trim(),
                     requireConfirmation = true,
-                    defaultTimeoutMs = 15000,
+                    defaultTimeoutMs = defaultTimeoutSeconds * 1000,
                     allowPty = false,
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis()
