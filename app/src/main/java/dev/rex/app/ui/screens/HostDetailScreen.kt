@@ -89,37 +89,46 @@ fun HostDetailScreen(
     var onboardingStage by rememberSaveable { mutableStateOf(AutoKeyOnboardingStage.Idle) }
 
     // Auto key onboarding logic
-    LaunchedEffect(autoKeyOnboarding, uiState.host, uiState.keyStatus, uiState.snackbarMessage) {
+    LaunchedEffect(autoKeyOnboarding, uiState.host?.keyBlobId, uiState.keyStatus, uiState.pendingAction, uiState.error) {
         if (!autoKeyOnboarding) return@LaunchedEffect
         val host = uiState.host ?: return@LaunchedEffect
+
+        Log.d("Rex", "Auto-onboarding: stage=$onboardingStage, keyBlobId=${host.keyBlobId}, keyStatus=${uiState.keyStatus}, error=${uiState.error}")
 
         when (onboardingStage) {
             AutoKeyOnboardingStage.Idle -> {
                 // Only start if no key exists
                 if (host.keyBlobId == null) {
+                    Log.d("Rex", "Auto-onboarding: Idle -> LaunchGenerate")
                     onboardingStage = AutoKeyOnboardingStage.LaunchGenerate
                 } else {
+                    Log.d("Rex", "Auto-onboarding: Idle -> Finished (key exists)")
                     onboardingStage = AutoKeyOnboardingStage.Finished
                 }
             }
             AutoKeyOnboardingStage.LaunchGenerate -> {
+                Log.d("Rex", "Auto-onboarding: LaunchGenerate -> AwaitKey")
                 onboardingStage = AutoKeyOnboardingStage.AwaitKey
                 viewModel.generateNewKey()
             }
             AutoKeyOnboardingStage.AwaitKey -> {
                 // Check for cancellation or error
-                if (uiState.snackbarMessage == "Authentication cancelled" || uiState.error != null) {
+                if (uiState.error != null) {
+                    Log.d("Rex", "Auto-onboarding: AwaitKey -> Finished (error: ${uiState.error})")
                     onboardingStage = AutoKeyOnboardingStage.Finished
                 } else if (host.keyBlobId != null && uiState.keyStatus == "pending") {
+                    Log.d("Rex", "Auto-onboarding: AwaitKey -> LaunchDeploy")
                     onboardingStage = AutoKeyOnboardingStage.LaunchDeploy
                 }
             }
             AutoKeyOnboardingStage.LaunchDeploy -> {
+                Log.d("Rex", "Auto-onboarding: LaunchDeploy -> Finished, calling showPasswordDialog()")
                 onboardingStage = AutoKeyOnboardingStage.Finished
                 viewModel.showPasswordDialog()
             }
             AutoKeyOnboardingStage.Finished -> {
                 // Do nothing, onboarding complete
+                Log.v("Rex", "Auto-onboarding: stage=Finished (no-op)")
             }
         }
     }

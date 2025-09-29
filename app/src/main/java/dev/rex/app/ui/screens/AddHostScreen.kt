@@ -48,12 +48,12 @@ fun AddHostScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Host") },
+                title = { Text(if (uiState.isEditMode) "Edit Host" else "Add Host") },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
-                        modifier = Modifier.semantics { 
-                            contentDescription = "Go back" 
+                        modifier = Modifier.semantics {
+                            contentDescription = "Go back"
                         }
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -127,7 +127,7 @@ fun AddHostScreen(
                     modifier = Modifier.weight(1f),
                     enabled = uiState.canSave && !uiState.isLoading
                 ) {
-                    Text("Save")
+                    Text(if (uiState.isEditMode) "Update" else "Save")
                 }
             }
         }

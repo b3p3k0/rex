@@ -40,14 +40,16 @@ data class AddHostUiState(
     val nicknameError: String? = null,
     val hostnameError: String? = null,
     val usernameError: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isEditMode: Boolean = false,
+    val originalHost: HostEntity? = null
 ) {
     val canSave: Boolean
-        get() = nickname.isNotBlank() && 
-                hostname.isNotBlank() && 
-                username.isNotBlank() && 
-                nicknameError == null && 
-                hostnameError == null && 
+        get() = nickname.isNotBlank() &&
+                hostname.isNotBlank() &&
+                username.isNotBlank() &&
+                nicknameError == null &&
+                hostnameError == null &&
                 usernameError == null &&
                 !isLoading
 }
@@ -60,6 +62,39 @@ class AddHostViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AddHostUiState())
     val uiState: StateFlow<AddHostUiState> = _uiState.asStateFlow()
+
+    init {
+        // Check if we're in edit mode by looking for hostId in saved state
+        val editHostId = savedStateHandle.get<String>("hostId")
+        if (editHostId != null) {
+            loadHostForEdit(editHostId)
+        }
+    }
+
+    private fun loadHostForEdit(hostId: String) {
+        _uiState.value = _uiState.value.copy(isLoading = true, isEditMode = true)
+
+        viewModelScope.launch(GlobalCEH.handler) {
+            try {
+                val host = hostsRepository.getHostById(hostId)
+                if (host != null) {
+                    _uiState.value = _uiState.value.copy(
+                        nickname = host.nickname,
+                        hostname = host.hostname,
+                        username = host.username,
+                        originalHost = host,
+                        isLoading = false
+                    )
+                } else {
+                    // Host not found, revert to add mode
+                    _uiState.value = AddHostUiState()
+                }
+            } catch (e: Exception) {
+                Log.e("Rex", "Failed to load host for edit: ${e.message}", e)
+                _uiState.value = AddHostUiState()
+            }
+        }
+    }
 
     fun updateNickname(nickname: String) {
         val sanitized = nickname.filterNot { it == '\n' || it == '\r' }
@@ -93,27 +128,44 @@ class AddHostViewModel @Inject constructor(
 
         viewModelScope.launch(GlobalCEH.handler) {
             try {
-                val host = HostEntity(
-                    id = UUID.randomUUID().toString(),
-                    nickname = currentState.nickname.trim(),
-                    hostname = currentState.hostname.trim(),
-                    port = 22,
-                    username = currentState.username.trim(),
-                    authMethod = "key",
-                    keyBlobId = null, // Stubbed for now
-                    connectTimeoutMs = 8000,
-                    readTimeoutMs = 15000,
-                    strictHostKey = true,
-                    pinnedHostKeyFingerprint = null,
-                    createdAt = System.currentTimeMillis(),
-                    updatedAt = System.currentTimeMillis()
-                )
-                
-                val hostId = hostsRepository.insertHost(host)
-                Log.d("Rex", "inserted host id=$hostId")
+                if (currentState.isEditMode && currentState.originalHost != null) {
+                    // Update existing host
+                    val updatedHost = currentState.originalHost.copy(
+                        nickname = currentState.nickname.trim(),
+                        hostname = currentState.hostname.trim(),
+                        username = currentState.username.trim(),
+                        updatedAt = System.currentTimeMillis()
+                    )
 
-                _uiState.value = _uiState.value.copy(isLoading = false)
-                onSuccess(host.id)
+                    hostsRepository.updateHost(updatedHost)
+                    Log.d("Rex", "Updated host id=${updatedHost.id}")
+
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    onSuccess(updatedHost.id)
+                } else {
+                    // Create new host
+                    val host = HostEntity(
+                        id = UUID.randomUUID().toString(),
+                        nickname = currentState.nickname.trim(),
+                        hostname = currentState.hostname.trim(),
+                        port = 22,
+                        username = currentState.username.trim(),
+                        authMethod = "key",
+                        keyBlobId = null, // Stubbed for now
+                        connectTimeoutMs = 8000,
+                        readTimeoutMs = 15000,
+                        strictHostKey = true,
+                        pinnedHostKeyFingerprint = null,
+                        createdAt = System.currentTimeMillis(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+
+                    val hostId = hostsRepository.insertHost(host)
+                    Log.d("Rex", "inserted host id=$hostId")
+
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    onSuccess(host.id)
+                }
             } catch (e: Exception) {
                 _uiState.value = currentState.copy(
                     isLoading = false,

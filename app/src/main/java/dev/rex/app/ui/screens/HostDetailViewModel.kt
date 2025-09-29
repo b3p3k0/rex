@@ -225,6 +225,12 @@ class HostDetailViewModel @Inject constructor(
     }
 
     fun showPasswordDialog() {
+        // Guard against duplicate calls
+        if (_uiState.value.showPasswordDialog || _uiState.value.provisionInProgress) {
+            Log.d("Rex", "showPasswordDialog() ignored - already showing dialog or provision in progress")
+            return
+        }
+        Log.d("Rex", "showPasswordDialog() executing Deploy action")
         executeAction(HostSecurityAction.Deploy)
     }
 
@@ -233,12 +239,18 @@ class HostDetailViewModel @Inject constructor(
     }
 
     fun hidePasswordDialog() {
-        _uiState.value = _uiState.value.copy(showPasswordDialog = false)
+        _uiState.value = _uiState.value.copy(
+            showPasswordDialog = false,
+            pendingAction = null // Clear pending action to prevent re-execution
+        )
+        Log.d("Rex", "hidePasswordDialog() - cleared pendingAction")
     }
 
     fun deployKey(password: String) {
         val currentHost = _uiState.value.host ?: return
         val keyBlobId = currentHost.keyBlobId ?: return
+
+        Log.d("Rex", "deployKey() starting for host ${currentHost.nickname}")
 
         viewModelScope.launch {
             try {
@@ -287,6 +299,9 @@ class HostDetailViewModel @Inject constructor(
                             errorMessage = null
                         )
                     )
+
+                    // Clear any pending action to prevent duplicate executions
+                    _uiState.value = _uiState.value.copy(pendingAction = null)
 
                     loadHostDetails()
                 } else {

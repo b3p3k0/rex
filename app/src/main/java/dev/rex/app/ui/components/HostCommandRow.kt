@@ -47,7 +47,11 @@ fun HostCommandRow(
     modifier: Modifier = Modifier,
     isRunning: Boolean = false,
     elapsedTimeMs: Long = 0,
-    errorMessage: String? = null
+    errorMessage: String? = null,
+    hasStoredOutput: Boolean = false,
+    showOutputDialog: Boolean = false,
+    canCopyOutput: Boolean = false,
+    onViewOutput: () -> Unit = {}
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showActionsDialog by remember { mutableStateOf(false) }
@@ -132,6 +136,22 @@ fun HostCommandRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
+            }
+
+            // Show "View output" button when output exists but dialog is closed
+            if (hasStoredOutput && !showOutputDialog) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onViewOutput,
+                    modifier = Modifier.semantics {
+                        contentDescription = "View output for ${hostCommand.name}"
+                    }
+                ) {
+                    Text(
+                        text = if (canCopyOutput) "View output" else "View output (copy disabled)",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
     }

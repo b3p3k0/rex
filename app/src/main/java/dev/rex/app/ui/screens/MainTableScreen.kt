@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -59,6 +60,7 @@ fun MainTableScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToLogs: () -> Unit,
     onNavigateToHostDetail: (String) -> Unit,
+    onNavigateToEditHost: (String) -> Unit,
     viewModel: MainTableViewModel = hiltViewModel()
 ) {
     Log.i("Rex", "Screen: MainTableScreen")
@@ -243,6 +245,7 @@ fun MainTableScreen(
                                 onNavigateToAddCommand = onNavigateToAddCommand,
                                 onNavigateToEditCommand = onNavigateToEditCommand,
                                 onNavigateToHostDetail = onNavigateToHostDetail,
+                                onNavigateToEditHost = onNavigateToEditHost,
                                 onDeleteCommand = { commandId ->
                                     viewModel.onDeleteCommand(commandId)
                                 },
@@ -256,6 +259,7 @@ fun MainTableScreen(
                                         )
                                     }
                                 },
+                                onViewOutput = { sessionViewModel.showOutputDialog() },
                                 enableHapticFeedback = settingsData.hapticFeedbackLongPress
                             )
                         }
@@ -403,8 +407,10 @@ private fun HostRowItem(
     onNavigateToAddCommand: (String) -> Unit,
     onNavigateToEditCommand: (String) -> Unit,
     onNavigateToHostDetail: (String) -> Unit,
+    onNavigateToEditHost: (String) -> Unit,
     onDeleteCommand: (String) -> Unit,
     onDeleteHost: () -> Unit,
+    onViewOutput: () -> Unit,
     enableHapticFeedback: Boolean = true
 ) {
     Log.d("Rex", "HostRowItem: ${hostRow.hostNickname} with ${commands.size} commands")
@@ -432,6 +438,14 @@ private fun HostRowItem(
                     )
                 }
                 Row {
+                    IconButton(
+                        onClick = { onNavigateToEditHost(hostRow.hostId) }
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit host ${hostRow.hostNickname}"
+                        )
+                    }
                     IconButton(
                         onClick = { onNavigateToHostDetail(hostRow.hostId) }
                     ) {
@@ -490,7 +504,11 @@ private fun HostRowItem(
                         enableHapticFeedback = enableHapticFeedback,
                         isRunning = isRunningCommand,
                         elapsedTimeMs = lastDuration,
-                        errorMessage = if (isActiveCommand) sessionState.error else null
+                        errorMessage = if (isActiveCommand) sessionState.error else null,
+                        hasStoredOutput = isActiveCommand && sessionState.output.isNotBlank(),
+                        showOutputDialog = sessionState.showOutputDialog,
+                        canCopyOutput = sessionState.canCopy,
+                        onViewOutput = onViewOutput
                     )
                     if (command != commands.last()) {
                         Spacer(modifier = Modifier.height(4.dp))

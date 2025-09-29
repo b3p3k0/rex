@@ -129,11 +129,14 @@ class SessionViewModel @Inject constructor(
                 // Fetch the mapping
                 val mapping = hostCommandRepository.getHostCommandMapping(mappingId)
                 if (mapping == null) {
-                    _uiState.value = _uiState.value.copy(
-                        error = "Command mapping not found: $mappingId",
-                        activeMappingId = null,
-                        isRunning = false
+                    val allowCopy = settingsStore.allowCopyOutput.first()
+                    emitFinalState(
+                        displayOutput = "",
+                        exitCode = null,
+                        allowCopy = allowCopy,
+                        errorMessage = "Command mapping not found. The command may have been deleted."
                     )
+                    _uiState.value = _uiState.value.copy(activeMappingId = mappingId) // Keep mapping ID so error shows inline
                     return@launch
                 }
 

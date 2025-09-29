@@ -34,6 +34,7 @@ import dev.rex.app.ui.screens.SettingsScreen
 
 object RexDestinations {
     const val MAIN_TABLE = "main_table"
+    const val HOST_ADD = "host_add"
     const val HOST_EDIT = "host_edit"
     const val HOST_DETAIL = "host_detail"
     const val ADD_COMMAND = "add-command"
@@ -53,7 +54,7 @@ fun RexNavigation(
         composable(RexDestinations.MAIN_TABLE) {
             MainTableScreen(
                 onNavigateToAddHost = {
-                    navController.navigate(RexDestinations.HOST_EDIT)
+                    navController.navigate(RexDestinations.HOST_ADD)
                 },
                 onNavigateToAddCommand = { hostId ->
                     navController.navigate("${RexDestinations.ADD_COMMAND}/$hostId")
@@ -69,11 +70,15 @@ fun RexNavigation(
                 },
                 onNavigateToHostDetail = { hostId ->
                     navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId")
+                },
+                onNavigateToEditHost = { hostId ->
+                    navController.navigate("${RexDestinations.HOST_EDIT}/$hostId")
                 }
             )
         }
 
-        composable(RexDestinations.HOST_EDIT) {
+        // Add new host
+        composable(RexDestinations.HOST_ADD) {
             AddHostScreen(
                 onNavigateBack = {
                     navController.popBackStack()
@@ -81,6 +86,22 @@ fun RexNavigation(
                 onHostCreated = { hostId ->
                     navController.popBackStack()
                     navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId?autoKeyOnboarding=true")
+                }
+            )
+        }
+
+        // Edit existing host
+        composable(
+            "${RexDestinations.HOST_EDIT}/{hostId}",
+            arguments = listOf(navArgument("hostId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val hostId = backStackEntry.arguments?.getString("hostId") ?: ""
+            AddHostScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onHostCreated = { _ ->
+                    navController.popBackStack()
                 }
             )
         }
