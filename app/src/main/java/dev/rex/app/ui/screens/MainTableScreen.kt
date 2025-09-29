@@ -20,6 +20,9 @@ package dev.rex.app.ui.screens
 
 import android.util.Log
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -36,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -55,7 +59,6 @@ fun MainTableScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToLogs: () -> Unit,
     onNavigateToHostDetail: (String) -> Unit,
-    onExecuteCommand: (HostCommandMapping) -> Unit,
     viewModel: MainTableViewModel = hiltViewModel()
 ) {
     Log.i("Rex", "Screen: MainTableScreen")
@@ -70,25 +73,50 @@ fun MainTableScreen(
     // Get haptic feedback setting from SettingsViewModel
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val settingsData by settingsViewModel.settingsData.collectAsStateWithLifecycle()
+
+    val sessionViewModel: SessionViewModel = hiltViewModel()
+    val sessionState by sessionViewModel.uiState.collectAsStateWithLifecycle()
     
     fun clearBlockedState() {
         blockedHost = null
         blockedCommand = null
     }
 
-    val handleExecuteCommand = remember(onExecuteCommand) {
-        { hostRow: HostCommandRow, command: HostCommandMapping ->
-            val requiresKey = hostRow.hostAuthMethod.equals("key", ignoreCase = true)
-            val keyProvisioned = !hostRow.hostKeyBlobId.isNullOrBlank() &&
-                hostRow.hostKeyProvisionStatus.equals("success", ignoreCase = true)
+    fun handleExecuteCommand(hostRow: HostCommandRow, command: HostCommandMapping) {
+        val requiresKey = hostRow.hostAuthMethod.equals("key", ignoreCase = true)
+        val keyProvisioned = !hostRow.hostKeyBlobId.isNullOrBlank() &&
+            hostRow.hostKeyProvisionStatus.equals("success", ignoreCase = true)
 
-            if (requiresKey && !keyProvisioned) {
-                blockedHost = hostRow
-                blockedCommand = command
-            } else {
-                onExecuteCommand(command)
-            }
+        if (requiresKey && !keyProvisioned) {
+            blockedHost = hostRow
+            blockedCommand = command
+            return
         }
+
+        if (sessionState.isRunning && sessionState.activeMappingId != command.mappingId) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "Another command is currently running",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            return
+        }
+
+        if (sessionState.isRunning && sessionState.activeMappingId == command.mappingId) {
+            // Already executing; ignore duplicate tap
+            return
+        }
+
+        if (sessionState.showOutputDialog) {
+            sessionViewModel.dismissOutputDialog()
+        }
+
+        if (sessionState.error != null) {
+            sessionViewModel.clearError()
+        }
+
+        sessionViewModel.startSession(command.mappingId)
     }
     
     // Group by host to avoid duplicate host entries
@@ -210,6 +238,7 @@ fun MainTableScreen(
                                         )
                                     } else null
                                 },
+                                sessionState = sessionState,
                                 onExecuteCommand = { command -> handleExecuteCommand(hostRow, command) },
                                 onNavigateToAddCommand = onNavigateToAddCommand,
                                 onNavigateToEditCommand = onNavigateToEditCommand,
@@ -236,6 +265,77 @@ fun MainTableScreen(
         }
     }
 
+    if (sessionState.showOutputDialog) {
+        AlertDialog(
+            onDismissRequest = { sessionViewModel.dismissOutputDialog() },
+            title = { Text("Command Output") },
+            text = {
+                val scrollState = rememberScrollState()
+                SelectionContainer {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(scrollState)
+                    ) {
+                        sessionState.error?.let { error ->
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        val dialogText = if (sessionState.output.isBlank()) {
+                            "Waiting for output..."
+                        } else {
+                            sessionState.output
+                        }
+
+                        Text(
+                            text = dialogText,
+                            fontFamily = FontFamily.Monospace
+                        )
+
+                        if (!sessionState.canCopy && sessionState.output.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Copying is disabled in Preferences",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (sessionState.isRunning) {
+                        TextButton(
+                            onClick = { sessionViewModel.cancelExecution() },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                    TextButton(
+                        onClick = { sessionViewModel.copyOutput() },
+                        enabled = sessionState.canCopy && sessionState.output.isNotBlank()
+                    ) {
+                        Text("Copy all")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sessionViewModel.dismissOutputDialog() }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
     // Show About dialog when requested
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
@@ -257,7 +357,22 @@ fun MainTableScreen(
                     pendingCommand?.let { command ->
                         TextButton(onClick = {
                             clearBlockedState()
-                            onExecuteCommand(command)
+                            if (sessionState.isRunning && sessionState.activeMappingId != command.mappingId) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Another command is currently running",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            } else {
+                                if (sessionState.showOutputDialog) {
+                                    sessionViewModel.dismissOutputDialog()
+                                }
+                                if (sessionState.error != null) {
+                                    sessionViewModel.clearError()
+                                }
+                                sessionViewModel.startSession(command.mappingId)
+                            }
                         }) {
                             Text("Run anyway")
                         }
@@ -283,6 +398,7 @@ fun MainTableScreen(
 private fun HostRowItem(
     hostRow: HostCommandRow,
     commands: List<HostCommandMapping>,
+    sessionState: SessionUiState,
     onExecuteCommand: (HostCommandMapping) -> Unit,
     onNavigateToAddCommand: (String) -> Unit,
     onNavigateToEditCommand: (String) -> Unit,
@@ -350,6 +466,14 @@ private fun HostRowItem(
             } else {
                 // Show commands
                 commands.forEach { command ->
+                    val isActiveCommand = sessionState.activeMappingId == command.mappingId
+                    val isRunningCommand = sessionState.isRunning && isActiveCommand
+                    val lastDuration = if (!sessionState.isRunning && isActiveCommand && sessionState.exitCode != null) {
+                        sessionState.elapsedTimeMs
+                    } else {
+                        0L
+                    }
+
                     HostCommandRowComponent(
                         hostCommand = command,
                         onExecute = { onExecuteCommand(command) },
@@ -363,7 +487,10 @@ private fun HostRowItem(
                             val commandId = mappingId.substringAfter("_")
                             onDeleteCommand(commandId)
                         },
-                        enableHapticFeedback = enableHapticFeedback
+                        enableHapticFeedback = enableHapticFeedback,
+                        isRunning = isRunningCommand,
+                        elapsedTimeMs = lastDuration,
+                        errorMessage = if (isActiveCommand) sessionState.error else null
                     )
                     if (command != commands.last()) {
                         Spacer(modifier = Modifier.height(4.dp))

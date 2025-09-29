@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -43,7 +44,10 @@ fun HostCommandRow(
     onEdit: (String) -> Unit = {},
     onDelete: (String) -> Unit = {},
     enableHapticFeedback: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isRunning: Boolean = false,
+    elapsedTimeMs: Long = 0,
+    errorMessage: String? = null
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showActionsDialog by remember { mutableStateOf(false) }
@@ -57,7 +61,11 @@ fun HostCommandRow(
                 interactionSource = interactionSource,
                 indication = LocalIndication.current,
                 role = Role.Button,
-                onClick = { onExecute(hostCommand) },
+                onClick = {
+                    if (!isRunning) {
+                        onExecute(hostCommand)
+                    }
+                },
                 onLongClick = {
                     if (enableHapticFeedback) {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -75,15 +83,56 @@ fun HostCommandRow(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Text(
-                text = "${hostCommand.nickname} • ${hostCommand.name}",
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${hostCommand.nickname} • ${hostCommand.name}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (isRunning) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Running…",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             Text(
                 text = hostCommand.hostname,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (!isRunning && elapsedTimeMs > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Completed in ${formatRunDuration(elapsedTimeMs)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (errorMessage != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 
@@ -157,5 +206,19 @@ fun HostCommandRow(
                 }
             }
         )
+    }
+}
+
+private fun formatRunDuration(elapsedMs: Long): String {
+    if (elapsedMs <= 0) return "0s"
+
+    val seconds = elapsedMs / 1000
+    val minutes = seconds / 60
+    val remainingSeconds = seconds % 60
+
+    return if (minutes > 0) {
+        "${minutes}m ${remainingSeconds}s"
+    } else {
+        "${remainingSeconds}s"
     }
 }

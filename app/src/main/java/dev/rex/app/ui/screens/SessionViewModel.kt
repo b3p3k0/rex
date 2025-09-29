@@ -53,7 +53,8 @@ data class SessionUiState(
     val error: String? = null,
     val hostNickname: String = "",
     val commandName: String = "",
-    val showOutputDialog: Boolean = false
+    val showOutputDialog: Boolean = false,
+    val activeMappingId: String? = null
 )
 
 @HiltViewModel
@@ -129,7 +130,9 @@ class SessionViewModel @Inject constructor(
                 val mapping = hostCommandRepository.getHostCommandMapping(mappingId)
                 if (mapping == null) {
                     _uiState.value = _uiState.value.copy(
-                        error = "Command mapping not found: $mappingId"
+                        error = "Command mapping not found: $mappingId",
+                        activeMappingId = null,
+                        isRunning = false
                     )
                     return@launch
                 }
@@ -143,7 +146,8 @@ class SessionViewModel @Inject constructor(
                     elapsedTimeMs = 0,
                     error = null,
                     canCopy = false,
-                    showOutputDialog = false
+                    showOutputDialog = false,
+                    activeMappingId = mapping.mappingId
                 )
 
                 // Check if command is dangerous and require gate
@@ -172,7 +176,8 @@ class SessionViewModel @Inject constructor(
                         if (mapping.keyBlobId.isNullOrBlank()) {
                             android.util.Log.e("RexSsh", "Key authentication failed: no key blob ID")
                             _uiState.value = _uiState.value.copy(
-                                error = "Key authentication required but no key blob ID found"
+                                error = "Key authentication required but no key blob ID found",
+                                isRunning = false
                             )
                             return@launch
                         }
@@ -198,7 +203,8 @@ class SessionViewModel @Inject constructor(
                                 else -> "Failed to decrypt private key: ${e.message}"
                             }
                             _uiState.value = _uiState.value.copy(
-                                error = userFriendlyMessage
+                                error = userFriendlyMessage,
+                                isRunning = false
                             )
                             return@launch
                         }
@@ -211,7 +217,8 @@ class SessionViewModel @Inject constructor(
                         } catch (e: Exception) {
                             android.util.Log.e("RexSsh", "SSH authentication failed: ${e.javaClass.simpleName}: ${e.message}", e)
                             _uiState.value = _uiState.value.copy(
-                                error = "SSH authentication failed: ${e.message}"
+                                error = "SSH authentication failed: ${e.message}",
+                                isRunning = false
                             )
                             return@launch
                         }
@@ -224,13 +231,15 @@ class SessionViewModel @Inject constructor(
                     "password" -> {
                         // TODO: Implement password authentication support
                         _uiState.value = _uiState.value.copy(
-                            error = "Password authentication is not yet supported"
+                            error = "Password authentication is not yet supported",
+                            isRunning = false
                         )
                         return@launch
                     }
                     else -> {
                         _uiState.value = _uiState.value.copy(
-                            error = "Unsupported authentication method: ${mapping.authMethod}"
+                            error = "Unsupported authentication method: ${mapping.authMethod}",
+                            isRunning = false
                         )
                         return@launch
                     }
@@ -263,7 +272,10 @@ class SessionViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             isRunning = true,
             showOutputDialog = false,
-            output = ""
+            output = "",
+            exitCode = null,
+            canCopy = false,
+            error = null
         )
 
         rawOutput.clear()
@@ -380,7 +392,8 @@ class SessionViewModel @Inject constructor(
             val allowCopy = settingsStore.allowCopyOutput.first()
             _uiState.value = _uiState.value.copy(
                 isRunning = false,
-                canCopy = allowCopy
+                canCopy = allowCopy,
+                activeMappingId = null
             )
             stopTimer()
             rawOutput.clear()
@@ -392,7 +405,14 @@ class SessionViewModel @Inject constructor(
     }
 
     fun dismissOutputDialog() {
-        _uiState.value = _uiState.value.copy(showOutputDialog = false)
+        _uiState.value = _uiState.value.copy(
+            showOutputDialog = false,
+            activeMappingId = null
+        )
+    }
+
+    fun clearError() {
+        _uiState.value = _uiState.value.copy(error = null)
     }
 
     fun copyOutput() {

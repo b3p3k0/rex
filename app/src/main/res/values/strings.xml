@@ -26,8 +26,8 @@
 
     <!-- About dialog -->
     <string name="about_title">About Rex</string>
-    <string name="about_line1">Hi. I\'m Rex — a tiny, tidy SSH runner vibe-coded by ChatGPT5, Claude Sonnet 4, and Kev (HI).</string>
-    <string name="about_line2">"Yes, it\'s AI-made." Some call that "slop." We call that draft material. We polished it into something useful.</string>
+    <string name="about_line1">Hi. I\'m Rex — a tiny, tidy SSH runner vibe-coded by ChatGPT5, Claude Sonnet 4 (AIs), and Kev (HI).</string>
+    <string name="about_line2">"Yes, it\'s AI-made." Some call that "slop." We call that the future. We polished this turd into something useful.</string>
     <string name="about_repo_prefix">Repo · </string>
     <string name="about_chat_prefix">Chat · </string>
     <string name="about_github_label">GitHub</string>

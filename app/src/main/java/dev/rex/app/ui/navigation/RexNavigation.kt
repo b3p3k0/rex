@@ -24,14 +24,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
-import android.net.Uri
 import dev.rex.app.ui.screens.AddCommandScreen
 import dev.rex.app.ui.screens.AddHostScreen
 import dev.rex.app.ui.screens.EditCommandScreen
 import dev.rex.app.ui.screens.HostDetailScreen
 import dev.rex.app.ui.screens.LogsScreen
 import dev.rex.app.ui.screens.MainTableScreen
-import dev.rex.app.ui.screens.SessionScreen
 import dev.rex.app.ui.screens.SettingsScreen
 
 object RexDestinations {
@@ -40,7 +38,6 @@ object RexDestinations {
     const val HOST_DETAIL = "host_detail"
     const val ADD_COMMAND = "add-command"
     const val COMMAND_EDIT_EXISTING = "command_edit_existing"
-    const val SESSION = "session"
     const val SETTINGS = "settings"
     const val LOGS = "logs"
 }
@@ -72,10 +69,6 @@ fun RexNavigation(
                 },
                 onNavigateToHostDetail = { hostId ->
                     navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId")
-                },
-                onExecuteCommand = { hostCommand ->
-                    // Navigate to session screen for real execution
-                    navController.navigate("${RexDestinations.SESSION}/${Uri.encode(hostCommand.mappingId)}")
                 }
             )
         }
@@ -127,20 +120,6 @@ fun RexNavigation(
             val commandId = backStackEntry.arguments?.getString("commandId") ?: ""
             EditCommandScreen(
                 commandId = commandId,
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
-            )
-        }
-
-        composable(
-            "${RexDestinations.SESSION}/{mappingId}",
-            arguments = listOf(navArgument("mappingId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val mappingId = backStackEntry.arguments?.getString("mappingId") ?: ""
-
-            SessionScreen(
-                mappingId = Uri.decode(mappingId),
                 onNavigateBack = {
                     navController.popBackStack()
                 }

@@ -1,22 +1,26 @@
 # Rex ProGuard Rules
 
-# SSHJ - Keep all SSH classes and algorithms
--keep class net.schmizz.** { *; }
--keep class com.hierynomus.** { *; }
+# SSHJ - Core library classes and algorithm registry
+-keep class net.schmizz.sshj.** { *; }
+-keep class com.hierynomus.sshj.** { *; }
 
-# SSHJ Transport - Ensure cipher and algorithm lists are preserved
--keep class net.schmizz.sshj.transport.cipher.** { *; }
--keep class net.schmizz.sshj.transport.kex.** { *; }
--keep class net.schmizz.sshj.transport.mac.** { *; }
--keep class net.schmizz.sshj.transport.compression.** { *; }
--keep class net.schmizz.sshj.transport.random.** { *; }
--keep class net.schmizz.sshj.signature.** { *; }
+# SSHJ - Algorithm factory pattern (critical for cipher negotiation)
+-keep class * implements net.schmizz.sshj.common.Factory$Named
+-keep class * extends net.schmizz.sshj.common.Factory
+-keep interface net.schmizz.sshj.common.Factory$Named
+-keep interface net.schmizz.sshj.common.Factory
 
-# SSHJ Algorithm Registry - Critical for cipher negotiation
+# SSHJ - Configuration classes with algorithm registration
 -keep class net.schmizz.sshj.DefaultConfig { *; }
+-keep class net.schmizz.sshj.AndroidConfig { *; }
 -keep class net.schmizz.sshj.ConfigImpl { *; }
--keepclassmembers class * {
-    @net.schmizz.sshj.common.Factory *;
+
+# Prevent R8 from optimizing away static initializers that register algorithms
+-keepclassmembers class net.schmizz.sshj.** {
+    static <clinit>();
+}
+-keepclassmembers class com.hierynomus.sshj.** {
+    static <clinit>();
 }
 
 # Suppress warnings for missing GSSAPI classes (not available on Android)
