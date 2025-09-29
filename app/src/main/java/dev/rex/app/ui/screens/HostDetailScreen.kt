@@ -87,10 +87,12 @@ fun HostDetailScreen(
     var passwordText by remember { mutableStateOf("") }
 
     // Auto key onboarding state machine
-    var onboardingStage by rememberSaveable { mutableStateOf(AutoKeyOnboardingStage.Idle) }
+    var onboardingStage by rememberSaveable(hostId, autoKeyOnboarding) {
+        mutableStateOf(AutoKeyOnboardingStage.Idle)
+    }
 
     // Auto key onboarding logic
-    LaunchedEffect(autoKeyOnboarding, uiState.host?.keyBlobId, uiState.keyStatus, uiState.pendingAction, uiState.error) {
+    LaunchedEffect(autoKeyOnboarding, uiState.host?.keyBlobId, uiState.keyStatus, uiState.error) {
         if (!autoKeyOnboarding) return@LaunchedEffect
         val host = uiState.host ?: return@LaunchedEffect
 
@@ -856,4 +858,3 @@ private fun DeleteKeyDialog(
         }
     )
 }
-

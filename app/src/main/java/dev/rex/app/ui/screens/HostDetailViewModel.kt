@@ -221,17 +221,22 @@ class HostDetailViewModel @Inject constructor(
     }
 
     fun showPasswordDialog() {
-        // Guard against duplicate calls
-        if (_uiState.value.showPasswordDialog || _uiState.value.provisionInProgress) {
-            Log.d("Rex", "showPasswordDialog() ignored - already showing dialog or provision in progress")
+        val state = _uiState.value
+        if (state.showPasswordDialog || state.provisionInProgress || state.showSecurityGate) {
+            Log.d(
+                "Rex",
+                "showPasswordDialog() skipped - dialog=${state.showPasswordDialog}, provision=${state.provisionInProgress}, gate=${state.showSecurityGate}"
+            )
             return
         }
-        Log.d("Rex", "showPasswordDialog() executing Deploy action")
         executeAction(HostSecurityAction.Deploy)
     }
 
     private fun performShowPasswordDialog() {
-        _uiState.value = _uiState.value.copy(showPasswordDialog = true)
+        _uiState.value = _uiState.value.copy(
+            showPasswordDialog = true,
+            pendingAction = null
+        )
     }
 
     fun hidePasswordDialog() {
