@@ -71,9 +71,6 @@ fun RexNavigation(
                 onNavigateToHostDetail = { hostId ->
                     navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId")
                 },
-                onNavigateToEditHost = { hostId ->
-                    navController.navigate("${RexDestinations.HOST_EDIT}/$hostId")
-                }
             )
         }
 
@@ -123,6 +120,9 @@ fun RexNavigation(
                 autoKeyOnboarding = autoKeyOnboarding,
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onNavigateToEditHost = { editHostId ->
+                    navController.navigate("${RexDestinations.HOST_EDIT}/$editHostId")
                 }
             )
         }

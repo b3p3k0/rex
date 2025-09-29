@@ -60,7 +60,6 @@ fun MainTableScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToLogs: () -> Unit,
     onNavigateToHostDetail: (String) -> Unit,
-    onNavigateToEditHost: (String) -> Unit,
     viewModel: MainTableViewModel = hiltViewModel()
 ) {
     Log.i("Rex", "Screen: MainTableScreen")
@@ -245,7 +244,6 @@ fun MainTableScreen(
                                 onNavigateToAddCommand = onNavigateToAddCommand,
                                 onNavigateToEditCommand = onNavigateToEditCommand,
                                 onNavigateToHostDetail = onNavigateToHostDetail,
-                                onNavigateToEditHost = onNavigateToEditHost,
                                 onDeleteCommand = { commandId ->
                                     viewModel.onDeleteCommand(commandId)
                                 },
@@ -407,7 +405,6 @@ private fun HostRowItem(
     onNavigateToAddCommand: (String) -> Unit,
     onNavigateToEditCommand: (String) -> Unit,
     onNavigateToHostDetail: (String) -> Unit,
-    onNavigateToEditHost: (String) -> Unit,
     onDeleteCommand: (String) -> Unit,
     onDeleteHost: () -> Unit,
     onViewOutput: () -> Unit,
@@ -438,14 +435,6 @@ private fun HostRowItem(
                     )
                 }
                 Row {
-                    IconButton(
-                        onClick = { onNavigateToEditHost(hostRow.hostId) }
-                    ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Edit host ${hostRow.hostNickname}"
-                        )
-                    }
                     IconButton(
                         onClick = { onNavigateToHostDetail(hostRow.hostId) }
                     ) {

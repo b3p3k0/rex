@@ -69,6 +69,7 @@ fun HostDetailScreen(
     hostId: String,
     autoKeyOnboarding: Boolean = false,
     onNavigateBack: () -> Unit,
+    onNavigateToEditHost: (String) -> Unit,
     viewModel: HostDetailViewModel = hiltViewModel()
 ) {
     Log.i("Rex", "Screen: HostDetailScreen for host $hostId")
@@ -176,7 +177,7 @@ fun HostDetailScreen(
                     uiState.host?.let { host ->
                         HostInfoCard(
                             host = host,
-                            onEditUsername = viewModel::showUsernameEditor
+                            onEditHost = { onNavigateToEditHost(host.id) }
                         )
                         KeyManagementCard(
                             uiState = uiState,
@@ -247,17 +248,6 @@ fun HostDetailScreen(
         )
     }
 
-    // Edit Username Dialog
-    if (uiState.showUsernameEditor) {
-        EditUsernameDialog(
-            username = uiState.editedUsername,
-            error = uiState.usernameError,
-            isUpdating = uiState.isUpdatingUsername,
-            onDismiss = viewModel::dismissUsernameEditor,
-            onUsernameChange = viewModel::updateEditedUsername,
-            onSave = viewModel::saveEditedUsername
-        )
-    }
 
     // Security gate overlay
     if (uiState.showSecurityGate) {
@@ -274,7 +264,7 @@ fun HostDetailScreen(
 @Composable
 private fun HostInfoCard(
     host: dev.rex.app.data.db.HostEntity,
-    onEditUsername: () -> Unit
+    onEditHost: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -283,10 +273,26 @@ private fun HostInfoCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Host Information",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Host Information",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                IconButton(
+                    onClick = onEditHost,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "Edit host configuration",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
 
             Row {
                 Text(
@@ -300,32 +306,16 @@ private fun HostInfoCard(
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row {
-                    Text(
-                        text = "Username: ",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = host.username,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                IconButton(
-                    onClick = onEditUsername,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.Edit,
-                        contentDescription = "Edit username",
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+            Row {
+                Text(
+                    text = "Username: ",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = host.username,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
 
             Row {
@@ -463,14 +453,16 @@ private fun PublicKeyPreview(publicKey: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            TextButton(
+            IconButton(
                 onClick = {
                     clipboardManager.setText(AnnotatedString(publicKey))
                 }
             ) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = "Copy")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Copy")
+                Icon(
+                    Icons.Filled.ContentCopy,
+                    contentDescription = "Copy public key",
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
 
@@ -865,72 +857,3 @@ private fun DeleteKeyDialog(
     )
 }
 
-@Composable
-private fun EditUsernameDialog(
-    username: String,
-    error: String?,
-    isUpdating: Boolean,
-    onDismiss: () -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onSave: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = if (isUpdating) { {} } else onDismiss,
-        title = { Text("Edit Username") },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Enter the SSH username for this host:")
-
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { input ->
-                        onUsernameChange(input.filterNot { it == '\n' || it == '\r' })
-                    },
-                    label = { Text("Username") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions.Default.copy(
-                        keyboardType = KeyboardType.Ascii,
-                        imeAction = ImeAction.Done,
-                        capitalization = KeyboardCapitalization.None
-                    ),
-                    isError = error != null,
-                    enabled = !isUpdating
-                )
-
-                error?.let {
-                    Text(
-                        text = it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onSave,
-                enabled = !isUpdating && username.isNotBlank() && error == null
-            ) {
-                if (isUpdating) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("Save")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isUpdating
-            ) {
-                Text("Cancel")
-            }
-        }
-    )
-}
