@@ -23,6 +23,24 @@
     static <clinit>();
 }
 
+# BouncyCastle Provider - Required by SSHJ for cipher implementations
+-keep class org.bouncycastle.jce.provider.BouncyCastleProvider { *; }
+-keep class org.bouncycastle.crypto.engines.** { *; }
+-keep class org.bouncycastle.crypto.modes.** { *; }
+-keep class org.bouncycastle.crypto.paddings.** { *; }
+-keep class org.bouncycastle.crypto.params.** { *; }
+-keep class org.bouncycastle.crypto.util.** { *; }
+
+# SSHJ - Cipher implementations (dynamically loaded)
+-keep class * extends net.schmizz.sshj.transport.cipher.Cipher
+-keep class net.schmizz.sshj.transport.cipher.** { *; }
+
+# SSHJ - Key exchange and MAC algorithms
+-keep class * extends net.schmizz.sshj.transport.kex.KeyExchange
+-keep class net.schmizz.sshj.transport.kex.** { *; }
+-keep class * extends net.schmizz.sshj.transport.mac.MAC
+-keep class net.schmizz.sshj.transport.mac.** { *; }
+
 # Suppress warnings for missing GSSAPI classes (not available on Android)
 -dontwarn org.slf4j.**
 -dontwarn kotlinx.coroutines.**
