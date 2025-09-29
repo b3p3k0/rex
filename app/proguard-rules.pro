@@ -31,6 +31,9 @@
 -keep class org.bouncycastle.crypto.params.** { *; }
 -keep class org.bouncycastle.crypto.util.** { *; }
 
+# BouncyCastle JCAJCE provider registry - Critical for algorithm registration
+-keep class org.bouncycastle.jcajce.provider.** { *; }
+
 # SSHJ - Cipher implementations (dynamically loaded)
 -keep class * extends net.schmizz.sshj.transport.cipher.Cipher
 -keep class net.schmizz.sshj.transport.cipher.** { *; }
