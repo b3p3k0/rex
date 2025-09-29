@@ -21,8 +21,12 @@ package dev.rex.app.data.ssh
 import android.util.Log
 import dev.rex.app.core.ErrorMapper
 import dev.rex.app.data.repo.HostsRepository
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
+import dev.rex.app.di.IoDispatcher
 import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
@@ -45,7 +49,8 @@ import javax.inject.Inject
 
 class SshjClient @Inject constructor(
     private val hostKeyVerifier: HostKeyVerifier,
-    private val hostsRepository: HostsRepository
+    private val hostsRepository: HostsRepository,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : SshClient {
     
     private var sshClient: SSHClient? = null
@@ -73,7 +78,7 @@ class SshjClient @Inject constructor(
         port: Int,
         timeoutsMs: Pair<Int, Int>,
         expectedPin: HostPin?
-    ): HostPin {
+    ): HostPin = withContext(ioDispatcher) {
         // TODO(claude): remove once SSH provisioning is stable
         val eddsaProvider = Security.getProvider("EdDSA")
         Log.d("RexSsh", "Starting connect to $host:$port, timeouts=${timeoutsMs}, EdDSA provider present: ${eddsaProvider != null}")
@@ -142,7 +147,7 @@ class SshjClient @Inject constructor(
                 println("Rex TOFU: First connection to $host:$port, fingerprint: ${actualPin.alg} ${actualPin.sha256}")
             }
 
-            return actualPin
+            actualPin
 
         } catch (e: TofuRequiredException) {
             // Re-throw TOFU exceptions to be handled by UI layer
@@ -159,6 +164,7 @@ class SshjClient @Inject constructor(
     }
     
     override suspend fun authUsernameKey(username: String, privateKeyPem: ByteArray) {
+        withContext(ioDispatcher) {
         val client = sshClient ?: throw IllegalStateException("Not connected")
 
         try {
@@ -203,9 +209,11 @@ class SshjClient @Inject constructor(
             // SECURITY: Zero the original byte array
             privateKeyPem.fill(0)
         }
+        }
     }
 
     override suspend fun authUsernamePassword(username: String, password: String) {
+        withContext(ioDispatcher) {
         val client = sshClient ?: throw IllegalStateException("Not connected")
         val passwordChars = password.toCharArray()
 
@@ -221,6 +229,7 @@ class SshjClient @Inject constructor(
         } finally {
             // SECURITY: Zero password immediately
             passwordChars.fill('0')
+        }
         }
     }
     
@@ -271,7 +280,7 @@ class SshjClient @Inject constructor(
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("Command execution failed: $message", e)
         }
-    }
+    }.flowOn(ioDispatcher)
     
     override suspend fun waitExitCode(timeoutMs: Int?): Int {
         val session = currentSession ?: throw IllegalStateException("No active session")

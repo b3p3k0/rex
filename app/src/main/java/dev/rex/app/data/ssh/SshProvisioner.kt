@@ -25,8 +25,10 @@ import dev.rex.app.core.StepStatus
 import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.crypto.KeyBlobId
 import dev.rex.app.data.repo.HostsRepository
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import dev.rex.app.di.IoDispatcher
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,7 +46,8 @@ class SshProvisioner @Inject constructor(
     private val gatekeeper: Gatekeeper,
     private val keyVault: KeyVault,
     private val hostKeyVerifier: HostKeyVerifier,
-    private val hostsRepository: HostsRepository
+    private val hostsRepository: HostsRepository,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
 
     suspend fun deployKeyToHost(
@@ -250,7 +253,7 @@ class SshProvisioner @Inject constructor(
     }
 
     private fun createSshClient(): SshClient {
-        return SshjClient(hostKeyVerifier, hostsRepository)
+        return SshjClient(hostKeyVerifier, hostsRepository, ioDispatcher)
     }
 
 }

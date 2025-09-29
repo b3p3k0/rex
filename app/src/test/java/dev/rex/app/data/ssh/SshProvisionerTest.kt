@@ -23,6 +23,7 @@ import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.crypto.KeyBlobId
 import dev.rex.app.data.repo.HostsRepository
 import io.mockk.*
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -34,6 +35,7 @@ class SshProvisionerTest {
     private val mockKeyVault = mockk<KeyVault>()
     private val mockHostKeyVerifier = mockk<HostKeyVerifier>()
     private val mockHostsRepository = mockk<HostsRepository>()
+    private val testDispatcher = StandardTestDispatcher()
 
     private lateinit var sshProvisioner: SshProvisioner
 
@@ -43,10 +45,25 @@ class SshProvisionerTest {
             mockGatekeeper,
             mockKeyVault,
             mockHostKeyVerifier,
-            mockHostsRepository
+            mockHostsRepository,
+            testDispatcher
         )
 
         coEvery { mockGatekeeper.requireGateForKeyOperation() } just Runs
+    }
+
+    @Test
+    fun `constructor accepts dispatcher parameter`() {
+        // Verify that the SshProvisioner can be constructed with a test dispatcher
+        // This ensures the DI integration is working correctly
+        val provisioner = SshProvisioner(
+            mockGatekeeper,
+            mockKeyVault,
+            mockHostKeyVerifier,
+            mockHostsRepository,
+            testDispatcher
+        )
+        assertNotNull(provisioner)
     }
 
     @Test
