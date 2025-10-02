@@ -1,4 +1,4 @@
-# Rex — Remote Exec for Android
+# Rex — Remote EXec for Android
 
 Android app to store hosts and commands, run them over SSH, and stream output. Security first. Minimal logging. No exports.
 
