@@ -18,12 +18,28 @@
 
 package dev.rex.app.data.ssh
 
+import android.util.Base64
+import io.mockk.every
+import io.mockk.mockkStatic
+import org.junit.Before
 import org.junit.Test
 import org.junit.Assert.*
 
 class HostKeyVerifierTest {
 
     private val verifier = HostKeyVerifierImpl()
+
+    @Before
+    fun setup() {
+        // android.util.Base64 is a throwing stub in unit tests; delegate to java.util.Base64
+        mockkStatic(Base64::class)
+        every { Base64.encodeToString(any(), any()) } answers {
+            java.util.Base64.getEncoder().withoutPadding().encodeToString(firstArg())
+        }
+        every { Base64.decode(any<String>(), any()) } answers {
+            java.util.Base64.getDecoder().decode(firstArg<String>())
+        }
+    }
 
     @Test
     fun `computeFingerprint generates consistent hash`() {
@@ -62,11 +78,14 @@ class HostKeyVerifierTest {
     }
 
     @Test
-    fun `computeFingerprint handles invalid key format`() {
+    fun `computeFingerprint falls back to raw key hashing for invalid OpenSSH format`() {
+        // computeFingerprint deliberately does not throw: input that fails OpenSSH
+        // parsing is treated as a raw transport key and hashed directly
         val invalidKey = "not-a-valid-key".toByteArray()
-        
-        assertThrows("Should throw for invalid key", IllegalArgumentException::class.java) {
-            verifier.computeFingerprint(invalidKey)
-        }
+
+        val fingerprint = verifier.computeFingerprint(invalidKey)
+
+        assertTrue("Fingerprint should be SHA256-prefixed", fingerprint.sha256.startsWith("SHA256:"))
+        assertEquals("Raw fallback should be deterministic", fingerprint, verifier.computeFingerprint(invalidKey))
     }
 }

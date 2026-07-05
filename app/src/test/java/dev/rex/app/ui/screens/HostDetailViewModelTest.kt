@@ -18,6 +18,7 @@
 
 package dev.rex.app.ui.screens
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import dev.rex.app.core.Gatekeeper
 import dev.rex.app.core.SecurityGateRequiredException
@@ -29,9 +30,13 @@ import dev.rex.app.data.repo.KeysRepository
 import dev.rex.app.data.ssh.SshProvisioner
 import dev.rex.app.data.ssh.ProvisionResult
 import io.mockk.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -69,6 +74,17 @@ class HostDetailViewModelTest {
 
     @Before
     fun setup() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+
+        // Mock Android Log to prevent "not mocked" errors in unit tests
+        mockkStatic(Log::class)
+        every { Log.d(any<String>(), any<String>()) } returns 0
+        every { Log.w(any<String>(), any<String>()) } returns 0
+        every { Log.w(any<String>(), any<String>(), any()) } returns 0
+        every { Log.i(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>(), any()) } returns 0
+
         every { mockSavedStateHandle.get<String>("hostId") } returns testHostId
         coEvery { mockGatekeeper.requireGateForKeyOperation() } just Runs
         coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost
@@ -81,6 +97,11 @@ class HostDetailViewModelTest {
             mockGatekeeper,
             mockSavedStateHandle
         )
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
@@ -102,7 +123,13 @@ class HostDetailViewModelTest {
 
         coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost
         coEvery { mockKeyVault.generateEd25519() } returns Pair(keyBlobId, publicKey)
-        coEvery { mockHostsRepository.assignKeyToHost(testHostId, keyBlobId.id) } just Runs
+        // assignKeyToHost persists status "pending"; emulate that for the reload
+        coEvery { mockHostsRepository.assignKeyToHost(testHostId, keyBlobId.id) } coAnswers {
+            coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost.copy(
+                keyBlobId = keyBlobId.id,
+                keyProvisionStatus = "pending"
+            )
+        }
 
         viewModel.generateNewKey()
 
@@ -122,8 +149,10 @@ class HostDetailViewModelTest {
 
         viewModel.generateNewKey()
 
+        // A closed gate shows the inline SecurityGate with the action pending, not an error
         val uiState = viewModel.uiState.value
-        assertEquals("Should show authentication error", "Device authentication required", uiState.error)
+        assertTrue("Security gate should be shown", uiState.showSecurityGate)
+        assertEquals("Pending action should be GenerateKey", HostSecurityAction.GenerateKey, uiState.pendingAction)
         assertFalse("Should not be loading", uiState.loading)
     }
 
@@ -141,9 +170,15 @@ class HostDetailViewModelTest {
 
         coEvery { mockKeyVault.validatePrivateKeyPem(any()) } returns true
         coEvery { mockKeyVault.importPrivateKeyPem(any()) } returns keyBlobId
-        coEvery { mockHostsRepository.assignKeyToHost(testHostId, keyBlobId.id) } just Runs
         coEvery { mockKeyVault.getPublicKeyOpenssh(keyBlobId) } returns "ssh-ed25519 AAAAC3..."
         coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost
+        // assignKeyToHost persists status "pending"; emulate that for the reload
+        coEvery { mockHostsRepository.assignKeyToHost(testHostId, keyBlobId.id) } coAnswers {
+            coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost.copy(
+                keyBlobId = keyBlobId.id,
+                keyProvisionStatus = "pending"
+            )
+        }
 
         viewModel.importPrivateKey()
 
@@ -248,7 +283,13 @@ class HostDetailViewModelTest {
         coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost
         coEvery { mockKeysRepository.getKeyBlobById(testHost.keyBlobId!!) } returns mockk()
         coEvery { mockKeyVault.deleteKey(KeyBlobId(testHost.keyBlobId!!)) } just Runs
-        coEvery { mockHostsRepository.updateKeyProvisionStatus(testHostId, null, "none") } just Runs
+        // updateKeyProvisionStatus persists the cleared key; emulate that for the reload
+        coEvery { mockHostsRepository.updateKeyProvisionStatus(testHostId, null, "none") } coAnswers {
+            coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost.copy(
+                keyBlobId = null,
+                keyProvisionStatus = "none"
+            )
+        }
 
         viewModel.showDeleteConfirmation()
         viewModel.deleteKey()

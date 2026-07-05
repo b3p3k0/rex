@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.Before
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 class LogsRepositoryTest {
 
@@ -91,40 +92,37 @@ class LogsRepositoryTest {
 
     @Test
     fun `deleteOldLogsByAge calculates correct cutoff timestamp`() = runTest {
-        coEvery { mockLogsDao.deleteOldLogsByAge(any()) } returns Unit
+        // Capture the cutoff instead of mocking System.currentTimeMillis();
+        // mockkStatic(System::class) deadlocks on JDK 18+ (SecurityManager recursion)
+        val cutoffSlot = slot<Long>()
+        coEvery { mockLogsDao.deleteOldLogsByAge(capture(cutoffSlot)) } returns Unit
 
-        // Mock current time to ensure predictable test
-        val currentTime = System.currentTimeMillis()
         val maxAgeDays = 7
-        val expectedCutoff = currentTime - (maxAgeDays * 24 * 60 * 60 * 1000L)
+        val ageMillis = maxAgeDays * 24 * 60 * 60 * 1000L
 
-        mockkStatic(System::class)
-        every { System.currentTimeMillis() } returns currentTime
-
+        val before = System.currentTimeMillis()
         repository.deleteOldLogsByAge(maxAgeDays)
+        val after = System.currentTimeMillis()
 
-        coVerify { mockLogsDao.deleteOldLogsByAge(expectedCutoff) }
-
-        unmockkStatic(System::class)
+        coVerify { mockLogsDao.deleteOldLogsByAge(any()) }
+        assertTrue(cutoffSlot.captured in (before - ageMillis)..(after - ageMillis))
     }
 
     @Test
     fun `deleteOldLogsByAge handles different age values`() = runTest {
-        coEvery { mockLogsDao.deleteOldLogsByAge(any()) } returns Unit
+        val cutoffs = mutableListOf<Long>()
+        coEvery { mockLogsDao.deleteOldLogsByAge(capture(cutoffs)) } returns Unit
 
-        val currentTime = 1000000000L
-        mockkStatic(System::class)
-        every { System.currentTimeMillis() } returns currentTime
+        val dayMillis = 24 * 60 * 60 * 1000L
 
-        // Test 1 day
+        val before = System.currentTimeMillis()
         repository.deleteOldLogsByAge(1)
-        coVerify { mockLogsDao.deleteOldLogsByAge(currentTime - (1 * 24 * 60 * 60 * 1000L)) }
-
-        // Test 30 days
         repository.deleteOldLogsByAge(30)
-        coVerify { mockLogsDao.deleteOldLogsByAge(currentTime - (30 * 24 * 60 * 60 * 1000L)) }
+        val after = System.currentTimeMillis()
 
-        unmockkStatic(System::class)
+        assertEquals(2, cutoffs.size)
+        assertTrue(cutoffs[0] in (before - 1 * dayMillis)..(after - 1 * dayMillis))
+        assertTrue(cutoffs[1] in (before - 30 * dayMillis)..(after - 30 * dayMillis))
     }
 
     @Test
