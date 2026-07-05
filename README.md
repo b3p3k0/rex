@@ -15,15 +15,15 @@ Android app to store hosts and commands, run them over SSH, and stream output. S
 
 ## Build Requirements
 
-- **JDK 17** - Required for Android development
+- **JDK 21** - Required for Android development
 - **Android SDK** - API 35 with build-tools 35.0.0
 - **Android Studio** - Latest version recommended
 
 ### Quick Setup (Ubuntu/Debian)
 
 ```bash
-# Install Java 17
-sudo apt update && sudo apt install -y openjdk-17-jdk
+# Install Java 21
+sudo apt update && sudo apt install -y openjdk-21-jdk
 
 # Install Android SDK
 mkdir -p "$HOME/Android/cmdline-tools" && cd "$HOME/Android"
@@ -55,7 +55,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - **Package**: `dev.rex.app` 
 - **Target**: API 26-35 (Android 8.0+)
 - **Language**: Kotlin with Jetpack Compose
-- **Database**: Room with schema version 1
+- **Database**: Room with schema version 4
 - **Dependency Injection**: Hilt
 - **SSH Library**: SSHJ 0.38.0
 

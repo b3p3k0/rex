@@ -52,9 +52,8 @@ Rex takes security seriously. If you discover a security vulnerability, please f
 
 ## Known Limitations
 
-- Ed25519 key generation not yet implemented (placeholder)
-- Full SSH key parsing implementation pending
-- Device credential integration requires Android implementation
+- **Imported PEM keys deploy a placeholder public key.** `KeyVaultImpl.extractPublicKeyFromPem` derives a fake public key from a content hash instead of parsing the real one, so keys imported from PEM cannot actually authenticate. Keys generated in the app are unaffected.
+- **Password authentication for command execution is not supported.** Hosts must use key authentication; passwords are only used transiently during key provisioning.
 
 ## Security Defaults
 
