@@ -79,10 +79,6 @@ class SshjClient @Inject constructor(
         timeoutsMs: Pair<Int, Int>,
         expectedPin: HostPin?
     ): HostPin = withContext(ioDispatcher) {
-        // TODO(claude): remove once SSH provisioning is stable
-        val eddsaProvider = Security.getProvider("EdDSA")
-        Log.d("RexSsh", "Starting connect to $host:$port, timeouts=${timeoutsMs}, EdDSA provider present: ${eddsaProvider != null}")
-
         checkNotNull(Security.getProvider(EdDSASecurityProvider.PROVIDER_NAME)) {
             "EdDSA security provider not registered"
         }
@@ -137,9 +133,6 @@ class SshjClient @Inject constructor(
                 hostKeyVerifier.computeFingerprint(key.encoded)
             } ?: throw RuntimeException("Failed to capture server host key during connection")
 
-            // TODO(claude): remove once SSH provisioning is stable
-            Log.d("RexSsh", "Captured host key: algorithm=${actualPin.alg}, fingerprint=${actualPin.sha256}")
-
             // SECURITY: If no expected pin, log for future TOFU UI but allow connection
             if (expectedPin == null) {
                 // TODO: Surface actualPin to user for verification in future TOFU UI implementation
@@ -156,8 +149,6 @@ class SshjClient @Inject constructor(
             // Re-throw host key mismatch exceptions
             throw e
         } catch (e: Exception) {
-            // TODO(claude): remove once SSH provisioning is stable
-            Log.d("RexSsh", "Connection failed with exception: ${e::class.qualifiedName}: ${e.message}")
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("SSH connection failed: $message", e)
         }

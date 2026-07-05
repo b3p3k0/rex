@@ -36,13 +36,9 @@ class RexApplication : Application() {
     lateinit var settingsInitializer: SettingsInitializer
 
     override fun onCreate() {
-        // TODO(claude): remove once SSH provisioning is stable
-        // Must run before any SSHJ class loading to configure slf4j logging
-        System.setProperty("org.slf4j.simpleLogger.log.net.schmizz", "debug")
-
         super.onCreate()
 
-        val providerWasInstalled = SshSecurityBootstrap.installIfNeeded { message ->
+        SshSecurityBootstrap.installIfNeeded { message ->
             Log.d("Rex", message)
         }
 
@@ -57,14 +53,6 @@ class RexApplication : Application() {
         // Configure SSHJ to use our full BC provider
         SecurityUtils.registerSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
         SecurityUtils.setSecurityProvider(BouncyCastleProvider.PROVIDER_NAME)
-
-        // TODO(claude): remove once SSH provisioning is stable
-        val eddsaProvider = Security.getProvider("EdDSA")
-        val sshjProvider = SecurityUtils.getSecurityProvider()
-        Log.i(
-            "Rex",
-            "Providers — EdDSA available: ${eddsaProvider != null}, BC: ${bc.javaClass.name}, SSHJ active: ${sshjProvider?.javaClass?.name}, installed now: $providerWasInstalled"
-        )
 
         // Force injection and initialization
         settingsInitializer.initialize()
