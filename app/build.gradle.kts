@@ -124,9 +124,6 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
 
-    // AndroidX Security Crypto
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
-
     // Biometric authentication
     implementation("androidx.biometric:biometric:1.1.0")
 
