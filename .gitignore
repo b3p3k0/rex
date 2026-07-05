@@ -1,0 +1,14 @@
+# Gradle
+.gradle/
+build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+
+# Local configuration (SDK path, signing overrides)
+local.properties
+
+# OS
+.DS_Store
