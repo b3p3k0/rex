@@ -1,9 +1,9 @@
 [versions]
-agp = "8.13.2"
-kotlin = "2.3.21"
+agp = "9.2.0"
+kotlin = "2.4.0"
 ksp = "2.3.9"
 composeBom = "2024.09.01"
-hilt = "2.58"
+hilt = "2.60"
 room = "2.8.4"
 coroutines = "1.11.0"
 appcompat = "1.7.0"
@@ -65,7 +65,6 @@ espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref =
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
