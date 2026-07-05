@@ -1,11 +1,11 @@
 plugins {
-    id("com.android.application") version "8.6.0" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.25" apply false
-    id("com.google.dagger.hilt.android") version "2.52" apply false
-    id("androidx.room") version "2.6.1" apply false  // TODO: Keep synchronized with room-compiler version in app/build.gradle.kts
-    kotlin("kapt") version "1.9.25" apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.kapt) apply false
+    alias(libs.plugins.hilt) apply false
+    alias(libs.plugins.room) apply false
 }
 
 tasks.register("clean", Delete::class) {
-    delete(rootProject.buildDir)
+    delete(rootProject.layout.buildDirectory)
 }
