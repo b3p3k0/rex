@@ -38,9 +38,23 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val KEK_ALIAS = "rex_kek"
         const val AES_GCM_CIPHER = "AES/GCM/NoPadding"
+        // Cipher provider backing AndroidKeyStore keys (present since API 23)
+        const val KEYSTORE_CIPHER_PROVIDER = "AndroidKeyStoreBCWorkaround"
         const val GCM_IV_LENGTH = 12
         const val GCM_TAG_LENGTH = 16
         const val AUTH_VALIDITY_SECONDS = 300
+    }
+
+    // SECURITY: the app installs the full BouncyCastle provider at position 1
+    // (SshSecurityBootstrap). Cipher.init's provider selection swallows the
+    // keystore's UserNotAuthenticatedException (an InvalidKeyException) and
+    // falls through to BC, which NPEs on the non-extractable KEK ("Attempt to
+    // get length of null array"). Pinning the keystore provider keeps KEK ops
+    // off BC and lets auth expiry surface as UserNotAuthenticatedException.
+    private fun kekCipher(): Cipher = try {
+        Cipher.getInstance(AES_GCM_CIPHER, KEYSTORE_CIPHER_PROVIDER)
+    } catch (e: Exception) {
+        Cipher.getInstance(AES_GCM_CIPHER)
     }
     
     private val keyStore: KeyStore by lazy {
@@ -89,7 +103,7 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
         if (secretKey == null) {
             throw IllegalStateException("KEK is not a SecretKey. Keystore may be corrupted.")
         }
-        val cipher = Cipher.getInstance(AES_GCM_CIPHER)
+        val cipher = kekCipher()
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         
         val iv = cipher.iv
@@ -134,7 +148,7 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
 
             android.util.Log.d("RexSsh", "WrappedKey validation: iv=${wrapped.iv.size} bytes, tag=${wrapped.tag.size} bytes, ciphertext=${wrapped.ciphertext.size} bytes")
 
-            val cipher = Cipher.getInstance(AES_GCM_CIPHER)
+            val cipher = kekCipher()
             val gcmSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, wrapped.iv)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec)
 

@@ -200,6 +200,12 @@ class SessionViewModel @Inject constructor(
                         android.util.Log.d("RexSsh", "About to decrypt private key with ID: ${mapping.keyBlobId}")
                         val keyBytes = try {
                             keyVault.decryptPrivateKey(KeyBlobId(mapping.keyBlobId))
+                        } catch (e: dev.rex.app.core.SecurityGateRequiredException) {
+                            _uiState.value = _uiState.value.copy(
+                                error = "Device authentication required. Please unlock your device and try again.",
+                                isRunning = false
+                            )
+                            return@launch
                         } catch (e: Exception) {
                             android.util.Log.e("RexSsh", "Failed to decrypt private key: ${e.javaClass.simpleName}: ${e.message}", e)
                             val userFriendlyMessage = when {

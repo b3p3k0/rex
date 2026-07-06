@@ -76,6 +76,17 @@ Hard-won pairings:
 properties → unsigned release with a console warning, not a failure. CI
 builds unsigned on purpose.
 
+## BouncyCastle at position 1 vs AndroidKeyStore keys
+
+`SshSecurityBootstrap` installs the full BC provider at position 1 (SSHJ
+needs its Curve25519). Consequence: any `Cipher`/`Signature` op on an
+AndroidKeyStore key MUST pin the keystore provider
+(`AndroidKeyStoreBCWorkaround`, see `AndroidKeystoreManager.kekCipher`).
+Unpinned, an unauthorized key's `UserNotAuthenticatedException` (an
+`InvalidKeyException`) is swallowed by Cipher's provider fall-through and
+BC dies on the non-extractable key with "Attempt to get length of null
+array" — historically misreported as "SSH key data is corrupted".
+
 ## Known placeholders and open issues
 
 - `KeyVaultImpl.extractPublicKeyFromPem` fabricates the public key for
