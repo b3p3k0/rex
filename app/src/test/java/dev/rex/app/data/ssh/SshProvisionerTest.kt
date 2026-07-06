@@ -91,7 +91,8 @@ class SshProvisionerTest {
                 username = "testuser",
                 password = "testpass",
                 keyBlobId = keyBlobId,
-                timeoutsMs = Pair(5000, 10000)
+                timeoutsMs = Pair(5000, 10000),
+                expectedPin = null
             )
         } catch (e: Exception) {
             // Expected to fail due to missing SSH client mock
@@ -142,7 +143,8 @@ class SshProvisionerTest {
             username = "testuser",
             password = "testpass",
             keyBlobId = keyBlobId,
-            timeoutsMs = Pair(5000, 10000)
+            timeoutsMs = Pair(5000, 10000),
+            expectedPin = null
         )
 
         // Assert

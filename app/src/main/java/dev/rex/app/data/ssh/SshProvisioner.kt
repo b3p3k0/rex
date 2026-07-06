@@ -55,7 +55,8 @@ class SshProvisioner @Inject constructor(
         username: String,
         password: String,
         keyBlobId: KeyBlobId,
-        timeoutsMs: Pair<Int, Int>
+        timeoutsMs: Pair<Int, Int>,
+        expectedPin: HostPin?
     ): ProvisionResult {
         gatekeeper.requireGateForKeyOperation()
 
@@ -82,7 +83,7 @@ class SshProvisioner @Inject constructor(
             // Step 2: Connect with password authentication
             steps[0] = steps[0].copy(status = StepStatus.InProgress)
             val client = createSshClient()
-            val actualPin = client.connect(hostname, port, timeoutsMs, null)
+            val actualPin = client.connect(hostname, port, timeoutsMs, expectedPin)
             steps[0] = steps[0].copy(status = StepStatus.Completed)
 
             try {
@@ -155,6 +156,9 @@ class SshProvisioner @Inject constructor(
                 password.toCharArray().fill('0')
             }
 
+        } catch (e: TofuRequiredException) {
+            // Surface to the UI layer for first-connection confirmation
+            throw e
         } catch (e: Exception) {
             // Mark current step as failed
             val currentStepIndex = steps.indexOfFirst { it.status == StepStatus.InProgress }
@@ -214,6 +218,9 @@ class SshProvisioner @Inject constructor(
                 privateKey.fill(0)
             }
 
+        } catch (e: TofuRequiredException) {
+            // Surface to the UI layer for first-connection confirmation
+            throw e
         } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime
             return ProvisionResult(

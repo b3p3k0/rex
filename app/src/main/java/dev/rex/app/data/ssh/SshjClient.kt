@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
 import dev.rex.app.di.IoDispatcher
 import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.userauth.UserAuthException
 import okio.ByteString
@@ -57,6 +58,11 @@ class SshjClient @Inject constructor(
     private var currentSession: Session? = null
     private var currentCommand: Session.Command? = null
     private var connectedHost: String? = null
+
+    // OpenSSH-compatible fingerprint input: hash the SSH wire-format key blob,
+    // not key.encoded (X.509 DER), so the value matches `ssh-keygen -lf`.
+    private fun hostKeyWireBlob(key: PublicKey): ByteArray =
+        Buffer.PlainBuffer().putPublicKey(key).compactData
 
     private fun cleanupSession() {
         try {
@@ -95,7 +101,7 @@ class SshjClient @Inject constructor(
                 client.addHostKeyVerifier(object : net.schmizz.sshj.transport.verification.HostKeyVerifier {
                     override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
                         capturedHostKey = key
-                        val actualPin = hostKeyVerifier.computeFingerprint(key.encoded)
+                        val actualPin = hostKeyVerifier.computeFingerprint(hostKeyWireBlob(key))
                         val isValid = hostKeyVerifier.verifyPinned(expectedPin, actualPin)
                         if (!isValid) {
                             throw HostKeyMismatchException(
@@ -130,14 +136,18 @@ class SshjClient @Inject constructor(
 
             // SECURITY: Extract the actual server host key from the captured key
             val actualPin = capturedHostKey?.let { key ->
-                hostKeyVerifier.computeFingerprint(key.encoded)
+                hostKeyVerifier.computeFingerprint(hostKeyWireBlob(key))
             } ?: throw RuntimeException("Failed to capture server host key during connection")
 
-            // SECURITY: If no expected pin, log for future TOFU UI but allow connection
+            // SECURITY: First contact must be confirmed by the user before any
+            // authentication happens. Disconnect and surface the fingerprint;
+            // callers retry with expectedPin set once the user trusts it.
             if (expectedPin == null) {
-                // TODO: Surface actualPin to user for verification in future TOFU UI implementation
-                // For now, allow connection to proceed for password-based key deployment
-                println("Rex TOFU: First connection to $host:$port, fingerprint: ${actualPin.alg} ${actualPin.sha256}")
+                close()
+                throw TofuRequiredException(
+                    actualPin,
+                    "First connection to $host:$port requires fingerprint verification"
+                )
             }
 
             actualPin

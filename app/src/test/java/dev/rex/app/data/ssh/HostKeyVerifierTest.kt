@@ -54,6 +54,25 @@ class HostKeyVerifierTest {
     }
 
     @Test
+    fun `computeFingerprint on a wire blob matches ssh-keygen output`() {
+        // SSH wire-format blob: uint32 length-prefixed algorithm name + key data.
+        // OpenSSH's SHA256 fingerprint is the base64 (no padding) digest of the
+        // whole blob.
+        val alg = "ssh-ed25519".toByteArray(Charsets.US_ASCII)
+        val keyData = ByteArray(32) { it.toByte() }
+        val blob = byteArrayOf(0, 0, 0, alg.size.toByte()) + alg +
+            byteArrayOf(0, 0, 0, keyData.size.toByte()) + keyData
+
+        val pin = verifier.computeFingerprint(blob)
+
+        val expected = "SHA256:" + java.util.Base64.getEncoder().withoutPadding().encodeToString(
+            java.security.MessageDigest.getInstance("SHA-256").digest(blob)
+        )
+        assertEquals("Algorithm should be parsed from the blob", "ssh-ed25519", pin.alg)
+        assertEquals("Fingerprint should hash the whole blob", expected, pin.sha256)
+    }
+
+    @Test
     fun `verifyPinned returns true for matching pins`() {
         val pin1 = HostPin("ssh-ed25519", "ABC123DEF456")
         val pin2 = HostPin("ssh-ed25519", "ABC123DEF456")
@@ -62,11 +81,13 @@ class HostKeyVerifierTest {
     }
 
     @Test
-    fun `verifyPinned returns false for different algorithms`() {
+    fun `verifyPinned ignores the display-only algorithm label`() {
+        // The DB persists only the SHA-256 fingerprint; the alg field is a
+        // display label and must not affect verification.
         val pin1 = HostPin("ssh-ed25519", "ABC123DEF456")
         val pin2 = HostPin("ssh-rsa", "ABC123DEF456")
-        
-        assertFalse("Different algorithms should not verify", verifier.verifyPinned(pin1, pin2))
+
+        assertTrue("Same fingerprint should verify regardless of alg label", verifier.verifyPinned(pin1, pin2))
     }
 
     @Test

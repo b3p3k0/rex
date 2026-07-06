@@ -220,7 +220,7 @@ class HostDetailViewModelTest {
         )
 
         coEvery { mockHostsRepository.getHostById(testHostId) } returns testHost
-        coEvery { mockSshProvisioner.deployKeyToHost(any(), any(), any(), any(), any(), any()) } returns provisionResult
+        coEvery { mockSshProvisioner.deployKeyToHost(any(), any(), any(), any(), any(), any(), any()) } returns provisionResult
         coEvery { mockHostsRepository.updateKeyProvisionStatus(any(), any(), any()) } just Runs
         coEvery { mockKeysRepository.insertProvisionLog(any()) } just Runs
 
@@ -239,7 +239,8 @@ class HostDetailViewModelTest {
                 username = testHost.username,
                 password = password,
                 keyBlobId = KeyBlobId(testHost.keyBlobId!!),
-                timeoutsMs = Pair(testHost.connectTimeoutMs, testHost.readTimeoutMs)
+                timeoutsMs = Pair(testHost.connectTimeoutMs, testHost.readTimeoutMs),
+                expectedPin = any()
             )
         }
         coVerify { mockHostsRepository.updateKeyProvisionStatus(testHostId, testHost.keyBlobId!!, "success") }

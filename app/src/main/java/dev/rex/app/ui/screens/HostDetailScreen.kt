@@ -50,6 +50,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import dev.rex.app.core.SecurityManager
 import dev.rex.app.ui.components.SecurityGate
+import dev.rex.app.ui.components.TofuConfirmationDialog
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -250,6 +251,15 @@ fun HostDetailScreen(
         )
     }
 
+
+    // TOFU first-connection confirmation
+    uiState.tofuPrompt?.let { prompt ->
+        TofuConfirmationDialog(
+            prompt = prompt,
+            onTrust = viewModel::onTofuTrusted,
+            onReject = viewModel::onTofuRejected
+        )
+    }
 
     // Security gate overlay
     if (uiState.showSecurityGate) {

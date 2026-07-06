@@ -37,6 +37,8 @@ import dev.rex.app.data.repo.HostsRepository
 import dev.rex.app.data.settings.SettingsStore
 import dev.rex.app.data.ssh.HostPin
 import dev.rex.app.data.ssh.SshClient
+import dev.rex.app.data.ssh.TofuRequiredException
+import dev.rex.app.ui.components.TofuPrompt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -54,7 +56,8 @@ data class SessionUiState(
     val hostNickname: String = "",
     val commandName: String = "",
     val showOutputDialog: Boolean = false,
-    val activeMappingId: String? = null
+    val activeMappingId: String? = null,
+    val tofuPrompt: TofuPrompt? = null
 )
 
 @HiltViewModel
@@ -164,13 +167,21 @@ class SessionViewModel @Inject constructor(
                     HostPin("ssh-rsa", mapping.pinnedHostKeyFingerprint)
                 } else null
 
-                // Connect to host
-                val actualPin = sshClient.connect(
-                    host = mapping.hostname,
-                    port = mapping.port,
-                    timeoutsMs = Pair(mapping.connectTimeoutMs, mapping.readTimeoutMs),
-                    expectedPin = expectedPin
-                )
+                // Connect to host; first contact aborts with a TOFU prompt the
+                // user must confirm before the session is retried
+                try {
+                    sshClient.connect(
+                        host = mapping.hostname,
+                        port = mapping.port,
+                        timeoutsMs = Pair(mapping.connectTimeoutMs, mapping.readTimeoutMs),
+                        expectedPin = expectedPin
+                    )
+                } catch (e: TofuRequiredException) {
+                    _uiState.value = _uiState.value.copy(
+                        tofuPrompt = TofuPrompt(mapping.hostname, mapping.port, e.hostPin)
+                    )
+                    return@launch
+                }
 
                 // Authenticate based on auth method
                 android.util.Log.d("RexSsh", "Starting authentication with method: ${mapping.authMethod}")
@@ -227,10 +238,6 @@ class SessionViewModel @Inject constructor(
                             return@launch
                         }
 
-                        // TOFU fingerprint update: only after successful authentication
-                        if (!mapping.strictHostKey && mapping.pinnedHostKeyFingerprint.isNullOrBlank()) {
-                            hostsRepository.updateHostFingerprint(mapping.id, actualPin.sha256)
-                        }
                     }
                     "password" -> {
                         // TODO: Implement password authentication support
@@ -362,6 +369,31 @@ class SessionViewModel @Inject constructor(
             stopTimer()
             rawOutput.clear()
         }
+    }
+
+    fun confirmTofuTrust() {
+        val prompt = _uiState.value.tofuPrompt ?: return
+        val mappingId = _uiState.value.activeMappingId ?: return
+        viewModelScope.launch(GlobalCEH.handler) {
+            val mapping = hostCommandRepository.getHostCommandMapping(mappingId)
+            if (mapping == null) {
+                _uiState.value = _uiState.value.copy(
+                    tofuPrompt = null,
+                    error = "Command mapping not found. The command may have been deleted."
+                )
+                return@launch
+            }
+            hostsRepository.updateHostFingerprint(mapping.id, prompt.pin.sha256)
+            _uiState.value = _uiState.value.copy(tofuPrompt = null)
+            startSession(mappingId)
+        }
+    }
+
+    fun dismissTofuPrompt() {
+        _uiState.value = _uiState.value.copy(
+            tofuPrompt = null,
+            activeMappingId = null
+        )
     }
 
     fun showOutputDialog() {

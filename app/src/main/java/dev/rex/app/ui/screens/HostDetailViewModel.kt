@@ -32,8 +32,11 @@ import dev.rex.app.data.db.HostEntity
 import dev.rex.app.data.db.KeyBlobEntity
 import dev.rex.app.data.repo.HostsRepository
 import dev.rex.app.data.repo.KeysRepository
+import dev.rex.app.data.ssh.HostPin
 import dev.rex.app.data.ssh.SshProvisioner
 import dev.rex.app.data.ssh.ProvisionResult
+import dev.rex.app.data.ssh.TofuRequiredException
+import dev.rex.app.ui.components.TofuPrompt
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -87,7 +90,8 @@ data class HostDetailUiState(
     val securityGateTitle: String = "",
     val securityGateSubtitle: String = "",
     val snackbarMessage: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val tofuPrompt: TofuPrompt? = null
 )
 
 @HiltViewModel
@@ -104,6 +108,11 @@ class HostDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(HostDetailUiState())
     val uiState: StateFlow<HostDetailUiState> = _uiState.asStateFlow()
+
+    // Held transiently while a TOFU prompt is up so the interrupted action can
+    // be retried after the user trusts the host key; never exposed in UI state.
+    private var pendingTofuAction: HostSecurityAction? = null
+    private var pendingDeployPassword: String? = null
 
     init {
         loadHostDetails()
@@ -268,7 +277,8 @@ class HostDetailViewModel @Inject constructor(
                     username = currentHost.username,
                     password = password,
                     keyBlobId = KeyBlobId(keyBlobId),
-                    timeoutsMs = Pair(currentHost.connectTimeoutMs, currentHost.readTimeoutMs)
+                    timeoutsMs = Pair(currentHost.connectTimeoutMs, currentHost.readTimeoutMs),
+                    expectedPin = currentHost.pinnedHostKeyFingerprint?.let { HostPin("ssh-rsa", it) }
                 )
 
                 _uiState.value = _uiState.value.copy(
@@ -330,6 +340,13 @@ class HostDetailViewModel @Inject constructor(
                     )
                 }
 
+            } catch (e: TofuRequiredException) {
+                pendingTofuAction = HostSecurityAction.Deploy
+                pendingDeployPassword = password
+                _uiState.value = _uiState.value.copy(
+                    provisionInProgress = false,
+                    tofuPrompt = TofuPrompt(currentHost.hostname, currentHost.port, e.hostPin)
+                )
             } catch (e: SecurityGateRequiredException) {
                 _uiState.value = _uiState.value.copy(
                     provisionInProgress = false,
@@ -360,16 +377,24 @@ class HostDetailViewModel @Inject constructor(
             error = null
         )
 
-        val result = sshProvisioner.testKeyBasedAuth(
-            hostname = currentHost.hostname,
-            port = currentHost.port,
-            username = currentHost.username,
-            keyBlobId = KeyBlobId(keyBlobId),
-            timeoutsMs = Pair(currentHost.connectTimeoutMs, currentHost.readTimeoutMs),
-            expectedPin = currentHost.pinnedHostKeyFingerprint?.let {
-                dev.rex.app.data.ssh.HostPin("ssh-rsa", it)
-            }
-        )
+        val result = try {
+            sshProvisioner.testKeyBasedAuth(
+                hostname = currentHost.hostname,
+                port = currentHost.port,
+                username = currentHost.username,
+                keyBlobId = KeyBlobId(keyBlobId),
+                timeoutsMs = Pair(currentHost.connectTimeoutMs, currentHost.readTimeoutMs),
+                expectedPin = currentHost.pinnedHostKeyFingerprint?.let { HostPin("ssh-rsa", it) }
+            )
+        } catch (e: TofuRequiredException) {
+            pendingTofuAction = HostSecurityAction.Test
+            _uiState.value = _uiState.value.copy(
+                showTestDialog = false,
+                testInProgress = false,
+                tofuPrompt = TofuPrompt(currentHost.hostname, currentHost.port, e.hostPin)
+            )
+            return
+        }
 
         _uiState.value = _uiState.value.copy(
             testInProgress = false,
@@ -449,6 +474,39 @@ class HostDetailViewModel @Inject constructor(
         pendingAction?.let { action ->
             executeAction(action)
         }
+    }
+
+    fun onTofuTrusted() {
+        val prompt = _uiState.value.tofuPrompt ?: return
+        val action = pendingTofuAction
+        val password = pendingDeployPassword
+        pendingTofuAction = null
+        pendingDeployPassword = null
+
+        viewModelScope.launch(GlobalCEH.handler) {
+            hostsRepository.updateHostFingerprint(hostId, prompt.pin.sha256)
+            // Update in-memory host synchronously so the retried action connects
+            // with the just-pinned fingerprint enforced.
+            _uiState.value = _uiState.value.copy(
+                tofuPrompt = null,
+                host = _uiState.value.host?.copy(pinnedHostKeyFingerprint = prompt.pin.sha256)
+            )
+
+            when (action) {
+                HostSecurityAction.Deploy -> password?.let { deployKey(it) }
+                HostSecurityAction.Test -> testKeyAuth()
+                else -> {}
+            }
+        }
+    }
+
+    fun onTofuRejected() {
+        pendingTofuAction = null
+        pendingDeployPassword = null
+        _uiState.value = _uiState.value.copy(
+            tofuPrompt = null,
+            snackbarMessage = "Connection cancelled — host key not trusted"
+        )
     }
 
     fun onSecurityGateCancelled() {

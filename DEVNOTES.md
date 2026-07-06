@@ -83,8 +83,6 @@ builds unsigned on purpose.
   authenticate. Documented in SECURITY.md; needs a real parser.
 - Password auth for command execution is unimplemented
   (`SessionViewModel`, "password" branch).
-- TOFU first-connection fingerprint is `println`'d, not surfaced in UI
-  (`SshjClient.connect`).
 
 ## Validation playbook
 

@@ -27,12 +27,16 @@ import javax.inject.Singleton
 class HostKeyVerifierImpl @Inject constructor() : HostKeyVerifier {
     
     override fun computeFingerprint(pubKey: ByteArray): HostPin {
+        // Binary wire-format blobs (length-prefixed, from the SSH transport)
+        // take priority; text parsing could misfire on binary data.
+        if (parseWireAlgorithm(pubKey) != null) {
+            return computeFingerprintFromRawKey(pubKey)
+        }
         return try {
-            // Try to parse as OpenSSH format first
+            // Text form: "ssh-ed25519 <base64-wire-blob> [comment]"
             val (algorithm, keyData) = parseOpenSshPublicKey(pubKey)
             computeFingerprintFromKeyData(algorithm, keyData)
         } catch (e: Exception) {
-            // Fallback: assume raw DER/X.509 format from SSH transport
             computeFingerprintFromRawKey(pubKey)
         }
     }
@@ -45,13 +49,13 @@ class HostKeyVerifierImpl @Inject constructor() : HostKeyVerifier {
     }
 
     private fun computeFingerprintFromRawKey(pubKey: ByteArray): HostPin {
-        // For raw keys from SSH transport, hash the entire key
+        // SSH wire-format blob: hashing the whole blob yields the same
+        // SHA256:… value OpenSSH prints (ssh-keygen -lf)
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(pubKey)
         val fingerprint = "SHA256:" + Base64.encodeToString(hash, Base64.NO_PADDING or Base64.NO_WRAP)
 
-        // Determine algorithm from key data (simplified)
-        val algorithm = when {
+        val algorithm = parseWireAlgorithm(pubKey) ?: when {
             pubKey.size == 32 -> "ssh-ed25519"
             pubKey.size > 256 -> "ssh-rsa"
             else -> "ssh-ecdsa"
@@ -59,9 +63,25 @@ class HostKeyVerifierImpl @Inject constructor() : HostKeyVerifier {
 
         return HostPin(algorithm, fingerprint)
     }
+
+    /** Reads the leading algorithm name of an SSH wire-format public key blob. */
+    private fun parseWireAlgorithm(blob: ByteArray): String? {
+        if (blob.size < 8) return null
+        val len = ((blob[0].toInt() and 0xff) shl 24) or
+            ((blob[1].toInt() and 0xff) shl 16) or
+            ((blob[2].toInt() and 0xff) shl 8) or
+            (blob[3].toInt() and 0xff)
+        if (len < 4 || len > 64 || blob.size < 4 + len) return null
+        val alg = String(blob, 4, len, Charsets.US_ASCII)
+        return if (alg.all { it.code in 33..126 }) alg else null
+    }
     
     override fun verifyPinned(expected: HostPin, actual: HostPin): Boolean {
-        return expected.alg == actual.alg && expected.sha256 == actual.sha256
+        // SECURITY: only the SHA-256 fingerprint is compared. It hashes the full
+        // encoded key, which commits to the algorithm; the alg field is a display
+        // label that is never persisted (the DB stores only the fingerprint), so
+        // comparing it would reject every pinned reconnect.
+        return expected.sha256 == actual.sha256
     }
     
     private fun parseOpenSshPublicKey(pubKey: ByteArray): Pair<String, ByteArray> {

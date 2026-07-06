@@ -54,6 +54,7 @@ import dev.rex.app.data.db.HostCommandMapping
 import dev.rex.app.data.db.HostCommandRow
 import dev.rex.app.ui.components.AboutDialog
 import dev.rex.app.ui.components.HostCommandRow as HostCommandRowComponent
+import dev.rex.app.ui.components.TofuConfirmationDialog
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -284,6 +285,14 @@ fun MainTableScreen(
                 }
             }
         }
+    }
+
+    sessionState.tofuPrompt?.let { prompt ->
+        TofuConfirmationDialog(
+            prompt = prompt,
+            onTrust = { sessionViewModel.confirmTofuTrust() },
+            onReject = { sessionViewModel.dismissTofuPrompt() }
+        )
     }
 
     if (sessionState.showOutputDialog) {

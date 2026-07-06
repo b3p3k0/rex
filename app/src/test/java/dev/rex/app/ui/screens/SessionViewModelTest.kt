@@ -33,6 +33,7 @@ import dev.rex.app.data.repo.HostsRepository
 import dev.rex.app.data.settings.SettingsStore
 import dev.rex.app.data.ssh.HostPin
 import dev.rex.app.data.ssh.SshClient
+import dev.rex.app.data.ssh.TofuRequiredException
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -310,6 +311,74 @@ class SessionViewModelTest {
         assertEquals("Execution failed: boom", state.error)
         assertFalse(state.isRunning)
         assertTrue("Dialog should show the failure", state.showOutputDialog)
+    }
+
+    @Test
+    fun `first connection surfaces a TOFU prompt instead of executing`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(pinnedFingerprint = null)
+        coEvery { mockSshClient.connect(any(), any(), any(), null) } throws
+            TofuRequiredException(HostPin("ssh-ed25519", "SHA256:xyz"), "First connection")
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        val state = viewModel.uiState.value
+        assertNotNull("TOFU prompt expected", state.tofuPrompt)
+        assertEquals("test.example.com", state.tofuPrompt?.hostname)
+        assertEquals(22, state.tofuPrompt?.port)
+        assertEquals("SHA256:xyz", state.tofuPrompt?.pin?.sha256)
+        assertNull("A TOFU prompt is not an error", state.error)
+        assertFalse(state.isRunning)
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
+        coVerify(exactly = 0) { mockHostsRepository.updateHostFingerprint(any(), any()) }
+    }
+
+    @Test
+    fun `confirmTofuTrust pins the fingerprint and runs the session`() = runTest {
+        var pinned: String? = null
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } coAnswers {
+            createMapping(pinnedFingerprint = pinned)
+        }
+        coEvery { mockHostsRepository.updateHostFingerprint("host-1", "SHA256:xyz") } coAnswers {
+            pinned = "SHA256:xyz"
+        }
+        coEvery { mockSshClient.connect(any(), any(), any(), any()) } coAnswers {
+            val expected = arg<HostPin?>(3)
+            if (expected == null) {
+                throw TofuRequiredException(HostPin("ssh-ed25519", "SHA256:xyz"), "First connection")
+            }
+            HostPin("ssh-ed25519", "SHA256:xyz")
+        }
+        val viewModel = createViewModel()
+        viewModel.startSession(testMappingId)
+        assertNotNull(viewModel.uiState.value.tofuPrompt)
+
+        viewModel.confirmTofuTrust()
+
+        val state = viewModel.uiState.value
+        assertNull("Prompt should be dismissed", state.tofuPrompt)
+        assertEquals("Command should have run after trust", 0, state.exitCode)
+        assertEquals("hello", state.output)
+        coVerify { mockHostsRepository.updateHostFingerprint("host-1", "SHA256:xyz") }
+        coVerify { mockSshClient.connect(any(), any(), any(), HostPin("ssh-rsa", "SHA256:xyz")) }
+    }
+
+    @Test
+    fun `dismissTofuPrompt clears the prompt without pinning`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(pinnedFingerprint = null)
+        coEvery { mockSshClient.connect(any(), any(), any(), null) } throws
+            TofuRequiredException(HostPin("ssh-ed25519", "SHA256:xyz"), "First connection")
+        val viewModel = createViewModel()
+        viewModel.startSession(testMappingId)
+
+        viewModel.dismissTofuPrompt()
+
+        val state = viewModel.uiState.value
+        assertNull(state.tofuPrompt)
+        assertNull("Active mapping should be cleared", state.activeMappingId)
+        coVerify(exactly = 0) { mockHostsRepository.updateHostFingerprint(any(), any()) }
     }
 
     @Test
