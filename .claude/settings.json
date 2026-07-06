@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(adb *)",
       "Bash(adb devices)",
       "Bash(adb devices *)",
       "Bash(adb logcat *)",
