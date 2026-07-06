@@ -92,6 +92,7 @@ class SessionViewModelTest {
         coEvery { mockKeyVault.decryptPrivateKey(any()) } returns "key-bytes".toByteArray()
         coEvery { mockSshClient.authUsernameKey(any(), any()) } just Runs
         every { mockSshClient.exec(any(), any(), any()) } returns flowOf("hello\n".encodeUtf8())
+        every { mockSshClient.lastStderr() } returns ""
         coEvery { mockSshClient.waitExitCode(any()) } returns 0
         coEvery { mockSshClient.cancel() } just Runs
         every { mockSshClient.close() } just Runs
@@ -236,23 +237,86 @@ class SessionViewModelTest {
     }
 
     @Test
-    fun `sudo exit 1 with no output surfaces a password hint`() = runTest {
+    fun `expired keystore while storing sudo password shows the security gate`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(runWithSudo = true)
+        coEvery { mockHostsRepository.getHostById("host-1") } returns hostEntity(null)
+        coEvery { mockKeyVault.storeSecret(any()) } throws
+            SecurityGateRequiredException("Device authentication required to access encrypted keys")
+        val viewModel = createViewModel()
+        viewModel.startSession(testMappingId)
+        assertNotNull(viewModel.uiState.value.sudoPasswordPrompt)
+
+        viewModel.submitSudoPassword("hunter2", remember = true)
+
+        val state = viewModel.uiState.value
+        assertTrue("Security gate should be shown, not a dead-end error", state.showSecurityGate)
+        assertNull("No dead-end error", state.error)
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any(), any()) }
+    }
+
+    @Test
+    fun `rejected stored sudo password clears the blob and re-prompts`() = runTest {
         coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
             createMapping(runWithSudo = true)
         coEvery { mockHostsRepository.getHostById("host-1") } returns hostEntity("blob-9")
         coEvery { mockKeyVault.decryptSecret(KeyBlobId("blob-9")) } returns "wrong".toByteArray()
+        coEvery { mockHostsRepository.setSudoPasswordBlobId("host-1", null) } returns true
         every { mockSshClient.exec(any(), any(), any()) } returns flowOf()
         coEvery { mockSshClient.waitExitCode(any()) } returns 1
+        every { mockSshClient.lastStderr() } returns
+            "sudo: Authentication failed, try again.\n\nsudo: Authentication required but not attempted"
         val viewModel = createViewModel()
 
         viewModel.startSession(testMappingId)
 
         val state = viewModel.uiState.value
-        assertEquals(1, state.exitCode)
-        assertTrue(
-            "Expected sudo hint, got: ${state.error}",
-            state.error?.contains("sudo authentication failed") == true
+        assertNotNull("Should re-prompt on rejection", state.sudoPasswordPrompt)
+        assertEquals(
+            "Sudo password was rejected. Try again.",
+            state.sudoPasswordPrompt?.errorMessage
         )
+        assertNull("No dead-end error when re-prompting", state.error)
+        assertFalse("Output dialog should be dismissed", state.showOutputDialog)
+        coVerify { mockHostsRepository.setSudoPasswordBlobId("host-1", null) }
+    }
+
+    @Test
+    fun `sudo denied by sudoers shows a clear error without re-prompting`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(runWithSudo = true)
+        coEvery { mockHostsRepository.getHostById("host-1") } returns hostEntity("blob-9")
+        coEvery { mockKeyVault.decryptSecret(KeyBlobId("blob-9")) } returns "pw".toByteArray()
+        every { mockSshClient.exec(any(), any(), any()) } returns flowOf()
+        coEvery { mockSshClient.waitExitCode(any()) } returns 1
+        every { mockSshClient.lastStderr() } returns
+            "testuser is not in the sudoers file. This incident will be reported."
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        val state = viewModel.uiState.value
+        assertNull("Should not re-prompt for an authorization failure", state.sudoPasswordPrompt)
+        assertTrue(
+            "Expected sudoers error, got: ${state.error}",
+            state.error?.contains("isn't allowed to run sudo") == true
+        )
+        coVerify(exactly = 0) { mockHostsRepository.setSudoPasswordBlobId(any(), null) }
+    }
+
+    @Test
+    fun `execution log records stderr byte count on failure`() = runTest {
+        val logSlot = slot<LogEntity>()
+        coEvery { mockLogsRepository.insertLog(capture(logSlot)) } just Runs
+        every { mockSshClient.exec(any(), any(), any()) } returns flowOf()
+        coEvery { mockSshClient.waitExitCode(any()) } returns 2
+        every { mockSshClient.lastStderr() } returns "ls: cannot access '/nope': No such file or directory"
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        assertTrue("stderr bytes should be logged", logSlot.captured.bytesStderr > 0)
+        assertEquals("failure", logSlot.captured.status)
     }
 
     @Test

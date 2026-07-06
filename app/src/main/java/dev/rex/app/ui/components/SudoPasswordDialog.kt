@@ -45,7 +45,8 @@ fun SudoPasswordDialog(
     username: String,
     commandName: String,
     onDismiss: () -> Unit,
-    onConfirm: (password: String, remember: Boolean) -> Unit
+    onConfirm: (password: String, remember: Boolean) -> Unit,
+    errorMessage: String? = null
 ) {
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -58,6 +59,14 @@ fun SudoPasswordDialog(
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
                 Text("\"$commandName\" runs with sudo on $hostNickname. Enter the password for $username.")
 
                 OutlinedTextField(

@@ -45,6 +45,7 @@ fun HostCommandRow(
     onExecute: (HostCommandMapping) -> Unit,
     onEdit: (String) -> Unit = {},
     onDelete: (String) -> Unit = {},
+    onManageSudoPassword: (() -> Unit)? = null,
     enableHapticFeedback: Boolean = true,
     modifier: Modifier = Modifier,
     isRunning: Boolean = false,
@@ -180,6 +181,17 @@ fun HostCommandRow(
                         }
                     ) {
                         Text("Edit")
+                    }
+
+                    if (hostCommand.runWithSudo && onManageSudoPassword != null) {
+                        TextButton(
+                            onClick = {
+                                showActionsDialog = false
+                                onManageSudoPassword()
+                            }
+                        ) {
+                            Text("Sudo password…")
+                        }
                     }
 
                     TextButton(

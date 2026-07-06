@@ -216,6 +216,7 @@ fun HostCommandsScreen(
                                     val commandId = mappingId.substringAfter("_")
                                     viewModel.onDeleteCommand(commandId)
                                 },
+                                onManageSudoPassword = { onNavigateToHostDetail(command.id) },
                                 enableHapticFeedback = settingsData.hapticFeedbackLongPress,
                                 isRunning = isRunningCommand,
                                 elapsedTimeMs = lastDuration,
@@ -248,7 +249,8 @@ fun HostCommandsScreen(
             onDismiss = { sessionViewModel.dismissSudoPrompt() },
             onConfirm = { password, remember ->
                 sessionViewModel.submitSudoPassword(password, remember)
-            }
+            },
+            errorMessage = prompt.errorMessage
         )
     }
 

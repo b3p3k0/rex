@@ -54,7 +54,8 @@ import javax.inject.Inject
 data class SudoPasswordPrompt(
     val hostNickname: String,
     val username: String,
-    val commandName: String
+    val commandName: String,
+    val errorMessage: String? = null
 )
 
 data class SessionUiState(
@@ -152,6 +153,7 @@ class SessionViewModel @Inject constructor(
     private suspend fun recordExecutionLog(
         exitCode: Int?,
         bytesStdout: Long,
+        bytesStderr: Long = 0L,
         durationMs: Long,
         errorMessage: String?
     ) {
@@ -168,7 +170,7 @@ class SessionViewModel @Inject constructor(
                     exitCode = exitCode,
                     durationMs = durationMs.toInt(),
                     bytesStdout = bytesStdout.toInt(),
-                    bytesStderr = 0,
+                    bytesStderr = bytesStderr.toInt(),
                     status = if (exitCode == 0) "success" else "failure",
                     messageRedacted = errorMessage?.let { Redactor.redact(it) },
                     idxSeq = ts
@@ -177,6 +179,30 @@ class SessionViewModel @Inject constructor(
         } catch (e: Exception) {
             android.util.Log.e("RexSsh", "Failed to record execution log: ${e.message}", e)
         }
+    }
+
+    // sudo prints a rejected/absent password to stderr; matching these lets us
+    // re-prompt instead of leaving a wrong stored secret in place forever.
+    // Wordings vary across sudo/PAM builds ("Sorry, try again",
+    // "Authentication failed, try again", "1 incorrect password attempt",
+    // "Authentication required but not attempted", "a password is required").
+    private fun isSudoAuthFailure(stderr: String): Boolean {
+        val s = stderr.lowercase()
+        return "try again" in s ||
+            "incorrect password" in s ||
+            "authentication failure" in s ||
+            "authentication failed" in s ||
+            "authentication required but not attempted" in s ||
+            "a password is required" in s ||
+            "no password was provided" in s
+    }
+
+    // Authorization failures a different password can't fix
+    private fun isSudoDenied(stderr: String): Boolean {
+        val s = stderr.lowercase()
+        return "is not in the sudoers file" in s ||
+            "not allowed to run sudo" in s ||
+            "not allowed to execute" in s
     }
 
     private fun requestSecurityGate() {
@@ -423,10 +449,38 @@ class SessionViewModel @Inject constructor(
                     command = execCommand,
                     pty = mapping.allowPty,
                     timeoutMs = mapping.defaultTimeoutMs,
-                    stdin = execStdin,
-                    sudo = mapping.runWithSudo
+                    stdin = execStdin
                 )
                 executionJob?.join()
+
+                // Sudo outcome: sudo reports its own failures on stderr, so
+                // classify from there rather than guessing from the exit code
+                if (mapping.runWithSudo && (_uiState.value.exitCode ?: 0) != 0) {
+                    val stderr = sshClient.lastStderr()
+                    when {
+                        isSudoAuthFailure(stderr) -> {
+                            // Drop the bad secret so we don't silently re-fail
+                            // forever, then re-prompt at the point of failure
+                            hostsRepository.setSudoPasswordBlobId(mapping.id, null)
+                            _uiState.value = _uiState.value.copy(
+                                showOutputDialog = false,
+                                output = "",
+                                error = null,
+                                sudoPasswordPrompt = SudoPasswordPrompt(
+                                    hostNickname = mapping.nickname,
+                                    username = mapping.username,
+                                    commandName = mapping.name,
+                                    errorMessage = "Sudo password was rejected. Try again."
+                                )
+                            )
+                        }
+                        isSudoDenied(stderr) -> {
+                            _uiState.value = _uiState.value.copy(
+                                error = "${mapping.username} isn't allowed to run sudo on ${mapping.nickname}."
+                            )
+                        }
+                    }
+                }
 
             } catch (e: Exception) {
                 val allowCopy = settingsStore.allowCopyOutput.first()
@@ -456,8 +510,7 @@ class SessionViewModel @Inject constructor(
         command: String,
         pty: Boolean = false,
         timeoutMs: Int,
-        stdin: ByteArray? = null,
-        sudo: Boolean = false
+        stdin: ByteArray? = null
     ) {
         if (_uiState.value.isRunning) return
 
@@ -496,23 +549,28 @@ class SessionViewModel @Inject constructor(
                     false // Default to false if settings access fails
                 }
 
-                // sudo's own failures land on stderr (not captured); surface a
-                // hint when the signature matches a rejected password
-                val sudoHint = if (sudo && exitCode == 1 && displayOutput.isBlank()) {
-                    "sudo authentication failed — check the stored sudo password in the host's key screen"
+                // Surface stderr on a failing command when there's no stdout to
+                // show. sudo-specific classification (rejected password / not a
+                // sudoer) is handled in startSession after join; this is the
+                // generic fallback and feeds real stderr metrics to the log.
+                val stderrTail = sshClient.lastStderr()
+                val stderrBytes = stderrTail.toByteArray(Charsets.UTF_8).size.toLong()
+                val errorText = if (exitCode != 0 && displayOutput.isBlank() && stderrTail.isNotBlank()) {
+                    Redactor.redact(stderrTail).trim().takeIf { it.isNotBlank() }
                 } else null
 
                 emitFinalState(
                     displayOutput = displayOutput,
                     exitCode = exitCode,
                     allowCopy = allowCopy,
-                    errorMessage = sudoHint
+                    errorMessage = errorText
                 )
                 recordExecutionLog(
                     exitCode = exitCode,
                     bytesStdout = streamedBytes,
+                    bytesStderr = stderrBytes,
                     durationMs = System.currentTimeMillis() - executionStartMs,
-                    errorMessage = sudoHint
+                    errorMessage = errorText
                 )
                 rawOutput.clear()
 

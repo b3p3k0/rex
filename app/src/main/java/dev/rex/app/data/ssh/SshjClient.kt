@@ -59,6 +59,43 @@ class SshjClient @Inject constructor(
     private var currentCommand: Session.Command? = null
     private var connectedHost: String? = null
 
+    // Bounded tail of the current exec's stderr, drained on a daemon thread so
+    // the SSH channel window can't fill and deadlock the stdout read loop.
+    private val stderrTail = StringBuilder()
+    private var stderrThread: Thread? = null
+
+    private companion object {
+        const val STDERR_CAP = 8 * 1024
+    }
+
+    override fun lastStderr(): String = synchronized(stderrTail) { stderrTail.toString() }
+
+    private fun startStderrReader(errorStream: java.io.InputStream) {
+        synchronized(stderrTail) { stderrTail.setLength(0) }
+        stderrThread = Thread {
+            try {
+                val buf = ByteArray(4096)
+                var n: Int
+                while (errorStream.read(buf).also { n = it } != -1) {
+                    if (n > 0) {
+                        synchronized(stderrTail) {
+                            stderrTail.append(String(buf, 0, n, Charsets.UTF_8))
+                            if (stderrTail.length > STDERR_CAP) {
+                                stderrTail.delete(0, stderrTail.length - STDERR_CAP)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Stream closed/cancelled; keep whatever was captured
+            }
+        }.apply {
+            isDaemon = true
+            name = "rex-stderr-reader"
+            start()
+        }
+    }
+
     // OpenSSH-compatible fingerprint input: hash the SSH wire-format key blob,
     // not key.encoded (X.509 DER), so the value matches `ssh-keygen -lf`.
     private fun hostKeyWireBlob(key: PublicKey): ByteArray =
@@ -75,6 +112,12 @@ class SshjClient @Inject constructor(
         } catch (e: Exception) {
             // Ignore cleanup errors
         }
+        try {
+            stderrThread?.interrupt()
+        } catch (e: Exception) {
+            // Ignore cleanup errors
+        }
+        stderrThread = null
         currentCommand = null
         currentSession = null
     }
@@ -256,6 +299,14 @@ class SshjClient @Inject constructor(
 
             currentCommand = cmd
 
+            // Drain stderr concurrently so sudo's own messages are captured and
+            // the channel window can't fill while we read stdout
+            try {
+                startStderrReader(cmd!!.errorStream)
+            } catch (e: Exception) {
+                Log.d("RexSsh", "stderr reader not started: ${e.javaClass.simpleName}")
+            }
+
             // SECURITY: write stdin payload (e.g. sudo password) then close the
             // stream so the remote command sees EOF; never log the content
             if (stdin != null) {
@@ -304,6 +355,13 @@ class SshjClient @Inject constructor(
                 session.join(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
             } else {
                 session.join()
+            }
+
+            // Let the stderr reader finish draining before we report
+            try {
+                stderrThread?.join(500)
+            } catch (e: InterruptedException) {
+                // Proceed with whatever stderr was captured
             }
 
             // Get the actual exit status from the command

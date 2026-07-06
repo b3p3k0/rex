@@ -51,6 +51,10 @@ interface SshClient : AutoCloseable {
      */
     fun exec(command: String, pty: Boolean = false, stdin: ByteArray? = null): Flow<ByteString>
 
+    /** Tail of the last exec's stderr (bounded). Callers must redact before
+     *  displaying or logging. Empty if the command wrote nothing to stderr. */
+    fun lastStderr(): String
+
     suspend fun waitExitCode(timeoutMs: Int?): Int
 
     suspend fun cancel()

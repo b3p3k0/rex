@@ -103,17 +103,25 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
         if (secretKey == null) {
             throw IllegalStateException("KEK is not a SecretKey. Keystore may be corrupted.")
         }
-        val cipher = kekCipher()
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-        
-        val iv = cipher.iv
-        val ciphertext = cipher.doFinal(rawDek)
-        
+
+        val iv: ByteArray
+        val ciphertext: ByteArray
+        try {
+            val cipher = kekCipher()
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+            iv = cipher.iv
+            ciphertext = cipher.doFinal(rawDek)
+        } catch (e: UserNotAuthenticatedException) {
+            // Symmetric with unwrapDek: let auth expiry surface as a gate
+            // request so callers can re-prompt instead of dead-ending
+            throw SecurityGateRequiredException("Device authentication required to access encrypted keys")
+        }
+
         try {
             // Split ciphertext and tag (last 16 bytes)
             val actualCiphertext = ciphertext.copyOfRange(0, ciphertext.size - GCM_TAG_LENGTH)
             val tag = ciphertext.copyOfRange(ciphertext.size - GCM_TAG_LENGTH, ciphertext.size)
-            
+
             return WrappedKey(iv, tag, actualCiphertext)
         } finally {
             // Zeroize the full ciphertext buffer
