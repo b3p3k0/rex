@@ -18,6 +18,7 @@
 
 package dev.rex.app.data.crypto
 
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.security.keystore.UserNotAuthenticatedException
@@ -39,6 +40,7 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
         const val AES_GCM_CIPHER = "AES/GCM/NoPadding"
         const val GCM_IV_LENGTH = 12
         const val GCM_TAG_LENGTH = 16
+        const val AUTH_VALIDITY_SECONDS = 300
     }
     
     private val keyStore: KeyStore by lazy {
@@ -53,7 +55,7 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
     
     private fun generateKek() {
         val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+        val builder = KeyGenParameterSpec.Builder(
             KEK_ALIAS,
             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
         )
@@ -61,10 +63,17 @@ class AndroidKeystoreManager @Inject constructor() : KeystoreManager {
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
             .setUserAuthenticationRequired(true)
-            .setUserAuthenticationValidityDurationSeconds(300)
-            .build()
-        
-        keyGenerator.init(keyGenParameterSpec)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            builder.setUserAuthenticationParameters(
+                AUTH_VALIDITY_SECONDS,
+                KeyProperties.AUTH_DEVICE_CREDENTIAL or KeyProperties.AUTH_BIOMETRIC_STRONG
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            builder.setUserAuthenticationValidityDurationSeconds(AUTH_VALIDITY_SECONDS)
+        }
+
+        keyGenerator.init(builder.build())
         keyGenerator.generateKey()
     }
     

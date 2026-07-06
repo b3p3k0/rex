@@ -22,6 +22,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.*
@@ -46,6 +47,7 @@ class MainActivity : FragmentActivity() {
     lateinit var settingsStore: SettingsStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Log.i("Rex", "MainActivity created")
         setContent {

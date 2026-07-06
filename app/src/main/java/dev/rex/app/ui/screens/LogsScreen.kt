@@ -147,7 +147,7 @@ private fun FiltersSection(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = hostDropdownExpanded) },
                 colors = ExposedDropdownMenuDefaults.textFieldColors(),
                 modifier = Modifier
-                    .menuAnchor()
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                     .fillMaxWidth()
             )
 
