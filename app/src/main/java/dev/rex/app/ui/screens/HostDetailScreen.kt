@@ -402,7 +402,10 @@ private fun KeyStatusSection(
         }
 
         provisionedAt?.let { timestamp ->
-            val formatter = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+            val locale = Locale.forLanguageTag(
+                androidx.compose.ui.text.intl.Locale.current.toLanguageTag()
+            )
+            val formatter = SimpleDateFormat("MMM dd, yyyy HH:mm", locale)
             Text(
                 text = "Last provisioned: ${formatter.format(Date(timestamp))}",
                 style = MaterialTheme.typography.bodySmall,

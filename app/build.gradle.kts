@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "dev.rex.app"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "dev.rex.app"
@@ -83,6 +83,15 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_21)
+    }
+}
+
+// The Android slf4j provider calls android.util.Log while ServiceLoader
+// initializes it, which throws in JVM unit tests and breaks mockk's logging;
+// unit tests must fall back to slf4j's NOP logger instead.
+configurations.configureEach {
+    if (name.contains("UnitTest")) {
+        exclude(group = "uk.uuid.slf4j", module = "slf4j-android")
     }
 }
 
