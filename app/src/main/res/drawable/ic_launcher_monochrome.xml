@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Themed-icon layer: paw print with a shell prompt in the pad. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46.5 36 a7.5 9.5 0 1 0 15 0 a7.5 9.5 0 1 0 -15 0 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30.5 45 a6.5 8.5 0 1 0 13 0 a6.5 8.5 0 1 0 -13 0 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M64.5 45 a6.5 8.5 0 1 0 13 0 a6.5 8.5 0 1 0 -13 0 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54 50 C44 50, 36 57, 36 66 C36 74, 44 79.5, 54 79.5 C64 79.5, 72 74, 72 66 C72 57, 64 50, 54 50 Z M46 58 L53 63.5 L46 69 L46 65.5 L49 63.5 L46 61.5 Z M57.5 66.8 h4 a1.5 1.5 0 0 1 0 3 h-4 a1.5 1.5 0 0 1 0 -3 Z" />
+</vector>
