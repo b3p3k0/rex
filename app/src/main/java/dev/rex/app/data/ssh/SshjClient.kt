@@ -251,19 +251,17 @@ class SshjClient @Inject constructor(
             val buffer = ByteArray(8192)
 
             // Read and emit actual command output
+            // SECURITY: metadata-only logging; never log command output content
             var bytesRead: Int
+            var totalBytes = 0L
             while (stdout.read(buffer).also { bytesRead = it } != -1) {
-                Log.d("RexSsh", "exec stream read: bytes=$bytesRead")
                 if (bytesRead > 0) {
-                    val chunk = buffer.copyOfRange(0, bytesRead).toByteString()
-                    val printableChunk = chunk.utf8().replace("\n", "\\n")
-                    Log.d("RexSsh", "exec chunk bytes=[$printableChunk]")
-                    emit(chunk)
+                    totalBytes += bytesRead
+                    emit(buffer.copyOfRange(0, bytesRead).toByteString())
                 }
             }
 
-            Log.d("RexSsh", "exec stream completed for $connectedHost")
-            Log.d("RexSsh", "exec: leaving session active for waitExitCode() call")
+            Log.d("RexSsh", "exec stream completed for $connectedHost: totalBytes=$totalBytes")
 
         } catch (e: Exception) {
             // Clean up session on any failure
@@ -295,9 +293,7 @@ class SshjClient @Inject constructor(
             val (error, message) = ErrorMapper.mapSshException(e)
             throw RuntimeException("Command timeout or execution failed: $message", e)
         } finally {
-            Log.d("RexSsh", "waitExitCode cleanup: cleaning up session and command")
             cleanupSession()
-            Log.d("RexSsh", "waitExitCode cleanup: session cleanup completed")
         }
     }
 

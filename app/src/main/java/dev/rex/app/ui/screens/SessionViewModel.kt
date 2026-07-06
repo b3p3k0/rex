@@ -113,9 +113,10 @@ class SessionViewModel @Inject constructor(
             error = errorMessage,
             showOutputDialog = true
         )
+        // SECURITY: metadata-only logging; never log command output content
         android.util.Log.d(
             "RexSsh",
-            "emitFinalState: exitCode=${exitCode}, canCopy=${newState.canCopy}, showOutputDialog=${newState.showOutputDialog}, output=[${displayOutput.replace("\n", "\\n")}]"
+            "emitFinalState: exitCode=$exitCode, outputChars=${displayOutput.length}, canCopy=${newState.canCopy}"
         )
         _uiState.value = newState
     }
@@ -296,65 +297,29 @@ class SessionViewModel @Inject constructor(
                 val actualTimeout = if (timeoutMs > 0) timeoutMs else 30000
                 val exitCode = sshClient.waitExitCode(actualTimeout)
 
-                val rawDisplay = buildDisplayOutput()
-                android.util.Log.d("RexSsh", "buildDisplayOutput raw=[${rawDisplay.replace("\n", "\\n")}]")
-
-                android.util.Log.d("RexSsh", "About to call Redactor.redact")
-                val displayOutput = Redactor.redact(rawDisplay)
-                android.util.Log.d("RexSsh", "Redactor completed, displayOutput=[${displayOutput.replace("\n", "\\n")}]")
-
-                android.util.Log.d("RexSsh", "About to check allowCopyOutput setting")
+                val displayOutput = Redactor.redact(buildDisplayOutput())
                 val allowCopy = try {
                     settingsStore.allowCopyOutput.first()
                 } catch (e: Exception) {
                     android.util.Log.e("RexSsh", "Failed to get allowCopyOutput setting: ${e.message}", e)
                     false // Default to false if settings access fails
                 }
-                android.util.Log.d("RexSsh", "allowCopyOutput=$allowCopy")
 
-                android.util.Log.d("RexSsh", "About to create new state")
-                val newState = try {
-                    _uiState.value.copy(
-                        isRunning = false,
-                        exitCode = exitCode,
-                        canCopy = allowCopy && displayOutput.isNotBlank(),
-                        output = displayOutput ?: "",
-                        error = null,
-                        showOutputDialog = true
-                    )
-                } catch (e: Exception) {
-                    android.util.Log.e("RexSsh", "Failed to create new state: ${e.message}", e)
-                    // Fallback state
-                    SessionUiState(
-                        isRunning = false,
-                        exitCode = exitCode,
-                        canCopy = false,
-                        output = displayOutput ?: "",
-                        error = null,
-                        showOutputDialog = true
-                    )
-                }
-                android.util.Log.d("RexSsh", "New state created: $newState")
-
-                android.util.Log.d("RexSsh", "About to update _uiState.value")
-                try {
-                    _uiState.value = newState
-                    android.util.Log.d("RexSsh", "UI state updated successfully")
-                } catch (e: Exception) {
-                    android.util.Log.e("RexSsh", "Failed to update UI state: ${e.message}", e)
-                }
+                emitFinalState(
+                    displayOutput = displayOutput,
+                    exitCode = exitCode,
+                    allowCopy = allowCopy
+                )
                 rawOutput.clear()
 
             } catch (e: Exception) {
                 android.util.Log.e("RexSsh", "Exception in executeCommandWithTimeout: ${e.javaClass.simpleName}: ${e.message}", e)
-                val rawDisplay = buildDisplayOutput()
-                android.util.Log.d("RexSsh", "buildDisplayOutput (error) raw=[${rawDisplay.replace("\n", "\\n")}]")
 
                 val displayOutput = try {
-                    Redactor.redact(rawDisplay)
+                    Redactor.redact(buildDisplayOutput())
                 } catch (redactorException: Exception) {
                     android.util.Log.e("RexSsh", "Redactor failed in error handler: ${redactorException.message}", redactorException)
-                    rawDisplay // Use raw display if redactor fails
+                    buildDisplayOutput() // Use raw display if redactor fails
                 }
 
                 val allowCopy = try {
@@ -364,16 +329,12 @@ class SessionViewModel @Inject constructor(
                     false
                 }
 
-                val newState = _uiState.value.copy(
-                    isRunning = false,
+                emitFinalState(
+                    displayOutput = displayOutput,
                     exitCode = null,
-                    canCopy = allowCopy && displayOutput.isNotBlank(),
-                    output = displayOutput,
-                    error = "Execution failed: ${e.message}",
-                    showOutputDialog = true
+                    allowCopy = allowCopy,
+                    errorMessage = "Execution failed: ${e.message}"
                 )
-                android.util.Log.d("RexSsh", "emitFinalState error state=$newState")
-                _uiState.value = newState
                 rawOutput.clear()
             }
             // Note: cleanup handled by startSession's finally block

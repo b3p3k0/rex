@@ -85,10 +85,6 @@ builds unsigned on purpose.
   (`SessionViewModel`, "password" branch).
 - TOFU first-connection fingerprint is `println`'d, not surfaced in UI
   (`SshjClient.connect`).
-- **Logging posture violation:** `SessionViewModel` (`emitFinalState`,
-  `executeCommandWithTimeout`) and `SshjClient.exec` log full command
-  output to logcat via `Log.d`. The app's stated posture is metadata-only
-  logging. Sweep these before any release-hardening pass.
 
 ## Validation playbook
 
