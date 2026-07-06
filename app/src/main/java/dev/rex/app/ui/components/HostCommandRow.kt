@@ -117,7 +117,7 @@ fun HostCommandRow(
             }
 
             Text(
-                text = hostCommand.command,
+                text = if (hostCommand.runWithSudo) "sudo · ${hostCommand.command}" else hostCommand.command,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,

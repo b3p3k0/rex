@@ -62,8 +62,8 @@ object DatabaseModule {
     // Repositories
     @Provides
     @Singleton
-    fun provideHostsRepository(hostsDao: HostsDao, hostCommandsDao: HostCommandsDao): HostsRepository = 
-        HostsRepository(hostsDao, hostCommandsDao)
+    fun provideHostsRepository(hostsDao: HostsDao, hostCommandsDao: HostCommandsDao, keyBlobsDao: KeyBlobsDao): HostsRepository =
+        HostsRepository(hostsDao, hostCommandsDao, keyBlobsDao)
 
     @Provides
     @Singleton

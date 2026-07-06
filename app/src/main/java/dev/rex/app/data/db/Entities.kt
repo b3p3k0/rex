@@ -40,7 +40,8 @@ data class HostEntity(
     @ColumnInfo(name = "key_provisioned_at") val keyProvisionedAt: Long? = null,
     @ColumnInfo(name = "key_provision_status") val keyProvisionStatus: String = "none",
     @ColumnInfo(name = "created_at") val createdAt: Long,
-    @ColumnInfo(name = "updated_at") val updatedAt: Long
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "sudo_password_blob_id") val sudoPasswordBlobId: String? = null
 )
 
 @Entity(tableName = "commands")
@@ -52,7 +53,8 @@ data class CommandEntity(
     @ColumnInfo(name = "default_timeout_ms") val defaultTimeoutMs: Int = 15000,
     @ColumnInfo(name = "allow_pty") val allowPty: Boolean = false,
     @ColumnInfo(name = "created_at") val createdAt: Long,
-    @ColumnInfo(name = "updated_at") val updatedAt: Long
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "run_with_sudo") val runWithSudo: Boolean = false
 )
 
 @Entity(
@@ -151,7 +153,8 @@ data class HostCommandMapping(
     @ColumnInfo(name = "default_timeout_ms") val defaultTimeoutMs: Int,
     @ColumnInfo(name = "allow_pty") val allowPty: Boolean,
     @ColumnInfo(name = "mapping_id") val mappingId: String,
-    @ColumnInfo(name = "sort_index") val sortIndex: Int
+    @ColumnInfo(name = "sort_index") val sortIndex: Int,
+    @ColumnInfo(name = "run_with_sudo") val runWithSudo: Boolean = false
 )
 
 data class HostCommandRow(
@@ -177,7 +180,8 @@ data class HostCommandRow(
     val cmdDefaultTimeoutMs: Int?,
     val cmdAllowPty: Boolean?,
     val mappingId: String?,   // nullable
-    val sortIndex: Int?       // nullable
+    val sortIndex: Int?,      // nullable
+    val cmdRunWithSudo: Boolean?
 )
 
 @Entity(tableName = "logs")

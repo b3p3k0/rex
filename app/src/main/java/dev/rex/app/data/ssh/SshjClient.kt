@@ -234,7 +234,7 @@ class SshjClient @Inject constructor(
         }
     }
     
-    override fun exec(command: String, pty: Boolean): Flow<ByteString> = flow {
+    override fun exec(command: String, pty: Boolean, stdin: ByteArray?): Flow<ByteString> = flow {
         val client = sshClient ?: throw IllegalStateException("Not connected")
 
         // SECURITY: Fresh session per exec to avoid poisoned session reuse
@@ -255,6 +255,19 @@ class SshjClient @Inject constructor(
             }
 
             currentCommand = cmd
+
+            // SECURITY: write stdin payload (e.g. sudo password) then close the
+            // stream so the remote command sees EOF; never log the content
+            if (stdin != null) {
+                try {
+                    val stdinStream = cmd!!.outputStream
+                    stdinStream.write(stdin)
+                    stdinStream.flush()
+                    stdinStream.close()
+                } finally {
+                    stdin.fill(0)
+                }
+            }
 
             // Stream real stdout output
             val stdout = cmd!!.inputStream

@@ -190,6 +190,12 @@ fun HostDetailScreen(
                             onDeleteKey = viewModel::showDeleteConfirmation
                         )
 
+                        SudoPasswordCard(
+                            stored = uiState.sudoPasswordStored,
+                            onSetOrReplace = viewModel::requestSetSudoPassword,
+                            onClear = viewModel::requestClearSudoPassword
+                        )
+
                         if (uiState.lastProvisionResult != null) {
                             ProvisionResultCard(
                                 result = uiState.lastProvisionResult!!,
@@ -219,6 +225,17 @@ fun HostDetailScreen(
                 viewModel.deployKey(password)
                 passwordText = ""
             }
+        )
+    }
+
+    // Sudo password set/replace dialog
+    if (uiState.showSudoPasswordDialog) {
+        PasswordDialog(
+            onDismiss = viewModel::hideSudoPasswordDialog,
+            onConfirm = viewModel::saveSudoPassword,
+            title = "Sudo password",
+            message = "Stored encrypted like SSH keys and entered automatically for \"Run with sudo\" commands on this host:",
+            confirmLabel = "Store"
         )
     }
 
@@ -268,5 +285,39 @@ fun HostDetailScreen(
             onCancel = viewModel::onSecurityGateCancelled,
             securityManager = securityManager
         )
+    }
+}
+
+@Composable
+private fun SudoPasswordCard(
+    stored: Boolean,
+    onSetOrReplace: () -> Unit,
+    onClear: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Sudo password",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = if (stored) "Stored (encrypted)" else "Not set — you'll be asked on the first sudo command",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onSetOrReplace) {
+                    Text(if (stored) "Replace" else "Set")
+                }
+                if (stored) {
+                    OutlinedButton(onClick = onClear) {
+                        Text("Clear")
+                    }
+                }
+            }
+        }
     }
 }

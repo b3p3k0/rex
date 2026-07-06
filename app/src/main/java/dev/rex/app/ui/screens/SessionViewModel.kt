@@ -48,6 +48,12 @@ import kotlinx.coroutines.launch
 import okio.ByteString.Companion.toByteString
 import javax.inject.Inject
 
+data class SudoPasswordPrompt(
+    val hostNickname: String,
+    val username: String,
+    val commandName: String
+)
+
 data class SessionUiState(
     val output: String = "",
     val isRunning: Boolean = false,
@@ -60,7 +66,8 @@ data class SessionUiState(
     val showOutputDialog: Boolean = false,
     val activeMappingId: String? = null,
     val tofuPrompt: TofuPrompt? = null,
-    val showSecurityGate: Boolean = false
+    val showSecurityGate: Boolean = false,
+    val sudoPasswordPrompt: SudoPasswordPrompt? = null
 )
 
 @HiltViewModel
@@ -88,6 +95,10 @@ class SessionViewModel @Inject constructor(
     private var timerJob: Job? = null
     private var clipboardClearJob: Job? = null
     private val rawOutput = StringBuilder()
+
+    // Held only between the sudo password dialog and the retried session
+    private var pendingSudoPassword: String? = null
+    private var pendingSudoRemember: Boolean = false
 
     private fun buildDisplayOutput(): String {
         if (rawOutput.isEmpty()) return ""
@@ -148,8 +159,27 @@ class SessionViewModel @Inject constructor(
     }
 
     fun onSecurityGateCancelled() {
+        pendingSudoPassword = null
+        pendingSudoRemember = false
         _uiState.value = _uiState.value.copy(
             showSecurityGate = false,
+            activeMappingId = null
+        )
+    }
+
+    fun submitSudoPassword(password: String, remember: Boolean) {
+        val mappingId = _uiState.value.activeMappingId ?: return
+        pendingSudoPassword = password
+        pendingSudoRemember = remember
+        _uiState.value = _uiState.value.copy(sudoPasswordPrompt = null)
+        startSession(mappingId)
+    }
+
+    fun dismissSudoPrompt() {
+        pendingSudoPassword = null
+        pendingSudoRemember = false
+        _uiState.value = _uiState.value.copy(
+            sudoPasswordPrompt = null,
             activeMappingId = null
         )
     }
@@ -195,6 +225,47 @@ class SessionViewModel @Inject constructor(
                         requestSecurityGate()
                         return@launch
                     }
+                }
+
+                // Resolve the sudo password before connecting: stored blob,
+                // freshly entered password, or prompt the user
+                var sudoPassword: String? = null
+                if (mapping.runWithSudo) {
+                    sudoPassword = pendingSudoPassword
+                    if (sudoPassword == null) {
+                        val blobId = hostsRepository.getHostById(mapping.id)?.sudoPasswordBlobId
+                        if (blobId != null) {
+                            sudoPassword = try {
+                                String(keyVault.decryptSecret(KeyBlobId(blobId)), Charsets.UTF_8)
+                            } catch (e: SecurityGateRequiredException) {
+                                requestSecurityGate()
+                                return@launch
+                            }
+                        }
+                    }
+                    if (sudoPassword == null) {
+                        _uiState.value = _uiState.value.copy(
+                            sudoPasswordPrompt = SudoPasswordPrompt(
+                                hostNickname = mapping.nickname,
+                                username = mapping.username,
+                                commandName = mapping.name
+                            ),
+                            isRunning = false
+                        )
+                        return@launch
+                    }
+                    if (pendingSudoPassword != null && pendingSudoRemember) {
+                        try {
+                            val blobId = keyVault.storeSecret(sudoPassword.toByteArray(Charsets.UTF_8))
+                            hostsRepository.setSudoPasswordBlobId(mapping.id, blobId.id)
+                            pendingSudoRemember = false
+                        } catch (e: SecurityGateRequiredException) {
+                            // Keep the pending password; the gate retry re-enters here
+                            requestSecurityGate()
+                            return@launch
+                        }
+                    }
+                    pendingSudoPassword = null
                 }
 
                 // Build expected host pin if we have a fingerprint
@@ -294,8 +365,26 @@ class SessionViewModel @Inject constructor(
                     }
                 }
 
-                // Execute the command and wait for completion before closing the client
-                executeCommandWithTimeout(mapping.command, mapping.allowPty, mapping.defaultTimeoutMs)
+                // Execute the command and wait for completion before closing the client.
+                // Sudo: -S reads the password from stdin, -k forces sudo to always
+                // consume it (so it can't fall through to the command on NOPASSWD
+                // hosts), -p '' suppresses the prompt text.
+                val execCommand: String
+                val execStdin: ByteArray?
+                if (mapping.runWithSudo) {
+                    execCommand = "sudo -S -k -p '' ${mapping.command}"
+                    execStdin = "$sudoPassword\n".toByteArray(Charsets.UTF_8)
+                } else {
+                    execCommand = mapping.command
+                    execStdin = null
+                }
+                executeCommandWithTimeout(
+                    command = execCommand,
+                    pty = mapping.allowPty,
+                    timeoutMs = mapping.defaultTimeoutMs,
+                    stdin = execStdin,
+                    sudo = mapping.runWithSudo
+                )
                 executionJob?.join()
 
             } catch (e: Exception) {
@@ -315,7 +404,13 @@ class SessionViewModel @Inject constructor(
         }
     }
 
-    private fun executeCommandWithTimeout(command: String, pty: Boolean = false, timeoutMs: Int) {
+    private fun executeCommandWithTimeout(
+        command: String,
+        pty: Boolean = false,
+        timeoutMs: Int,
+        stdin: ByteArray? = null,
+        sudo: Boolean = false
+    ) {
         if (_uiState.value.isRunning) return
 
         _uiState.value = _uiState.value.copy(
@@ -333,7 +428,7 @@ class SessionViewModel @Inject constructor(
         executionJob = viewModelScope.launch(GlobalCEH.handler) {
             try {
                 // Stream command output
-                sshClient.exec(command, pty).collect { byteString ->
+                sshClient.exec(command, pty, stdin).collect { byteString ->
                     val text = byteString.utf8()
                     rawOutput.append(text)
                 }
@@ -350,10 +445,17 @@ class SessionViewModel @Inject constructor(
                     false // Default to false if settings access fails
                 }
 
+                // sudo's own failures land on stderr (not captured); surface a
+                // hint when the signature matches a rejected password
+                val sudoHint = if (sudo && exitCode == 1 && displayOutput.isBlank()) {
+                    "sudo authentication failed — check the stored sudo password in the host's key screen"
+                } else null
+
                 emitFinalState(
                     displayOutput = displayOutput,
                     exitCode = exitCode,
-                    allowCopy = allowCopy
+                    allowCopy = allowCopy,
+                    errorMessage = sudoHint
                 )
                 rawOutput.clear()
 
@@ -506,6 +608,8 @@ class SessionViewModel @Inject constructor(
 
         // Clear sensitive data from memory
         rawOutput.clear()
+        pendingSudoPassword = null
+        pendingSudoRemember = false
 
         // Clean up SSH client
         viewModelScope.launch(GlobalCEH.handler) {

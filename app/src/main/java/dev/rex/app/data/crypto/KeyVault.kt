@@ -25,6 +25,13 @@ interface KeyVault {
     suspend fun decryptPrivateKey(id: KeyBlobId): ByteArray
     suspend fun getPublicKeyOpenssh(id: KeyBlobId): String
     suspend fun validatePrivateKeyPem(pem: ByteArray): Boolean
+
+    /**
+     * Stores an arbitrary secret (e.g. a sudo password) in the same
+     * KEK-protected envelope as private keys. Zeroizes the input.
+     */
+    suspend fun storeSecret(secret: ByteArray): KeyBlobId
+    suspend fun decryptSecret(id: KeyBlobId): ByteArray
 }
 
 @JvmInline

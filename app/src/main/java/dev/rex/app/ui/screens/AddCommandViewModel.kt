@@ -39,6 +39,7 @@ import javax.inject.Inject
 data class AddCommandUiState(
     val name: String = "",
     val command: String = "",
+    val runWithSudo: Boolean = false,
     val hostNickname: String = "",
     val nameError: String? = null,
     val commandError: String? = null,
@@ -111,6 +112,10 @@ class AddCommandViewModel @Inject constructor(
         )
     }
 
+    fun updateRunWithSudo(runWithSudo: Boolean) {
+        _uiState.value = _uiState.value.copy(runWithSudo = runWithSudo)
+    }
+
     private fun validateName(name: String): String? {
         return when {
             name.isBlank() -> "Command name is required"
@@ -148,7 +153,8 @@ class AddCommandViewModel @Inject constructor(
                     defaultTimeoutMs = defaultTimeoutSeconds * 1000,
                     allowPty = false,
                     createdAt = System.currentTimeMillis(),
-                    updatedAt = System.currentTimeMillis()
+                    updatedAt = System.currentTimeMillis(),
+                    runWithSudo = currentState.runWithSudo
                 )
 
                 val commandId = commandsRepository.addCommandForHost(hostId, command)

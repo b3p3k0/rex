@@ -44,7 +44,12 @@ interface SshClient : AutoCloseable {
 
     suspend fun authUsernamePassword(username: String, password: String)
 
-    fun exec(command: String, pty: Boolean = false): Flow<ByteString>
+    /**
+     * @param stdin optional bytes written to the remote command's stdin and
+     *              then closed (e.g. a sudo password); the array is zeroized
+     *              after writing and must not be reused by the caller
+     */
+    fun exec(command: String, pty: Boolean = false, stdin: ByteArray? = null): Flow<ByteString>
 
     suspend fun waitExitCode(timeoutMs: Int?): Int
 

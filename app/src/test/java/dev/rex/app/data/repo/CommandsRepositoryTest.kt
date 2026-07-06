@@ -18,12 +18,15 @@
 
 package dev.rex.app.data.repo
 
+import android.util.Log
 import dev.rex.app.data.db.CommandEntity
 import dev.rex.app.data.db.CommandsDao
 import dev.rex.app.data.db.HostCommandsDao
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -38,6 +41,10 @@ class CommandsRepositoryTest {
 
     @Before
     fun setup() {
+        mockkStatic(Log::class)
+        every { Log.d(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>()) } returns 0
+
         commandsDao = mockk()
         hostCommandsDao = mockk()
         repository = CommandsRepository(commandsDao, hostCommandsDao)
@@ -71,5 +78,27 @@ class CommandsRepositoryTest {
         repository.insertCommand(command)
 
         coVerify { commandsDao.insertCommand(command) }
+    }
+
+    @Test
+    fun `addCommandForHost persists runWithSudo flag`() = runTest {
+        val command = CommandEntity(
+            id = UUID.randomUUID().toString(),
+            name = "restart nginx",
+            command = "systemctl restart nginx",
+            requireConfirmation = true,
+            defaultTimeoutMs = 15000,
+            allowPty = false,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            runWithSudo = true
+        )
+        coEvery { commandsDao.insertCommand(any()) } returns Unit
+        coEvery { hostCommandsDao.insertHostCommand(any()) } returns 1L
+
+        repository.addCommandForHost("host-1", command)
+
+        coVerify { commandsDao.insertCommand(match { it.runWithSudo }) }
+        coVerify { hostCommandsDao.insertHostCommand(match { it.hostId == "host-1" && it.commandId == command.id }) }
     }
 }

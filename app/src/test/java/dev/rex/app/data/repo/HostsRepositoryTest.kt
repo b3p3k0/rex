@@ -21,6 +21,7 @@ package dev.rex.app.data.repo
 import dev.rex.app.data.db.HostEntity
 import dev.rex.app.data.db.HostsDao
 import dev.rex.app.data.db.HostCommandsDao
+import dev.rex.app.data.db.KeyBlobsDao
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -35,12 +36,14 @@ class HostsRepositoryTest {
     private lateinit var hostsDao: HostsDao
     private lateinit var repository: HostsRepository
     private lateinit var hostCommandsDao: HostCommandsDao
+    private lateinit var keyBlobsDao: KeyBlobsDao
 
     @Before
     fun setup() {
         hostsDao = mockk()
         hostCommandsDao = mockk()
-        repository = HostsRepository(hostsDao, hostCommandsDao)
+        keyBlobsDao = mockk()
+        repository = HostsRepository(hostsDao, hostCommandsDao, keyBlobsDao)
     }
 
     @Test

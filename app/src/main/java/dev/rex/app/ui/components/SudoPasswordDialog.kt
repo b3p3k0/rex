@@ -20,14 +20,19 @@ package dev.rex.app.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -35,31 +40,32 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun PasswordDialog(
+fun SudoPasswordDialog(
+    hostNickname: String,
+    username: String,
+    commandName: String,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-    title: String = "Enter SSH Password",
-    message: String = "Enter the SSH password for automated key deployment:",
-    confirmLabel: String = "Deploy"
+    onConfirm: (password: String, remember: Boolean) -> Unit
 ) {
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var rememberPassword by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text("Sudo password needed") },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(message)
+                Text("\"$commandName\" runs with sudo on $hostNickname. Enter the password for $username.")
 
                 OutlinedTextField(
                     value = password,
                     onValueChange = { input ->
                         password = input.filterNot { it == '\n' || it == '\r' }
                     },
-                    label = { Text("Password") },
+                    label = { Text("Sudo password") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -75,14 +81,41 @@ fun PasswordDialog(
                         }
                     }
                 )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = rememberPassword,
+                            role = Role.Checkbox,
+                            onValueChange = { rememberPassword = it }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = rememberPassword,
+                        onCheckedChange = null
+                    )
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(
+                            text = "Remember for this host",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Encrypted like SSH keys",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(password) },
+                onClick = { onConfirm(password, rememberPassword) },
                 enabled = password.isNotBlank()
             ) {
-                Text(confirmLabel)
+                Text("Run")
             }
         },
         dismissButton = {

@@ -38,9 +38,12 @@ interface HostsDao {
 
     @Delete
     suspend fun deleteHost(host: HostEntity)
-    
+
     @Query("DELETE FROM hosts WHERE id = :hostId")
     suspend fun deleteById(hostId: String): Int
+
+    @Query("UPDATE hosts SET sudo_password_blob_id = :blobId, updated_at = :now WHERE id = :hostId")
+    suspend fun updateSudoPasswordBlobId(hostId: String, blobId: String?, now: Long): Int
 }
 
 @Dao
@@ -78,6 +81,7 @@ interface HostCommandsDao {
                h.strict_host_key, h.pinned_host_key_fingerprint, h.key_provisioned_at, h.key_provision_status,
                h.created_at, h.updated_at,
                c.name, c.command, c.require_confirmation, c.default_timeout_ms, c.allow_pty,
+               c.run_with_sudo,
                hc.host_id || '_' || hc.command_id as mapping_id, hc.sort_index
         FROM host_commands hc
         INNER JOIN hosts h ON hc.host_id = h.id
@@ -109,7 +113,8 @@ interface HostCommandsDao {
                c.default_timeout_ms AS cmdDefaultTimeoutMs,
                c.allow_pty     AS cmdAllowPty,
                hc.host_id || '_' || hc.command_id AS mappingId,
-               hc.sort_index   AS sortIndex
+               hc.sort_index   AS sortIndex,
+               c.run_with_sudo AS cmdRunWithSudo
         FROM hosts h
         LEFT JOIN host_commands hc ON hc.host_id = h.id
         LEFT JOIN commands c       ON c.id = hc.command_id
@@ -123,6 +128,7 @@ interface HostCommandsDao {
                h.strict_host_key, h.pinned_host_key_fingerprint, h.key_provisioned_at, h.key_provision_status,
                h.created_at, h.updated_at,
                c.name, c.command, c.require_confirmation, c.default_timeout_ms, c.allow_pty,
+               c.run_with_sudo,
                hc.host_id || '_' || hc.command_id as mapping_id, hc.sort_index
         FROM host_commands hc
         INNER JOIN hosts h ON hc.host_id = h.id
@@ -152,6 +158,9 @@ interface KeyBlobsDao {
 
     @Delete
     suspend fun deleteKeyBlob(keyBlob: KeyBlobEntity)
+
+    @Query("DELETE FROM key_blobs WHERE id = :id")
+    suspend fun deleteKeyBlobById(id: String): Int
 }
 
 @Dao

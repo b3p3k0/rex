@@ -66,6 +66,14 @@ sealed class HostSecurityAction(
         "Delete SSH Key",
         "Authenticate to permanently delete this key"
     )
+    object SetSudoPassword : HostSecurityAction(
+        "Store Sudo Password",
+        "Authenticate to store the sudo password for this host"
+    )
+    object ClearSudoPassword : HostSecurityAction(
+        "Clear Sudo Password",
+        "Authenticate to remove the stored sudo password"
+    )
 }
 
 data class HostDetailUiState(
@@ -91,7 +99,9 @@ data class HostDetailUiState(
     val securityGateSubtitle: String = "",
     val snackbarMessage: String? = null,
     val error: String? = null,
-    val tofuPrompt: TofuPrompt? = null
+    val tofuPrompt: TofuPrompt? = null,
+    val sudoPasswordStored: Boolean = false,
+    val showSudoPasswordDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -129,6 +139,7 @@ class HostDetailViewModel @Inject constructor(
                         host = host,
                         keyStatus = host.keyProvisionStatus,
                         keyProvisionedAt = host.keyProvisionedAt,
+                        sudoPasswordStored = host.sudoPasswordBlobId != null,
                         loading = false
                     )
 
@@ -520,6 +531,59 @@ class HostDetailViewModel @Inject constructor(
     }
 
 
+    fun requestSetSudoPassword() = executeAction(HostSecurityAction.SetSudoPassword)
+
+    fun requestClearSudoPassword() = executeAction(HostSecurityAction.ClearSudoPassword)
+
+    fun hideSudoPasswordDialog() {
+        _uiState.value = _uiState.value.copy(showSudoPasswordDialog = false)
+    }
+
+    fun saveSudoPassword(password: String) {
+        viewModelScope.launch(GlobalCEH.handler) {
+            try {
+                val blobId = keyVault.storeSecret(password.toByteArray(Charsets.UTF_8))
+                hostsRepository.setSudoPasswordBlobId(hostId, blobId.id)
+                _uiState.value = _uiState.value.copy(
+                    showSudoPasswordDialog = false,
+                    sudoPasswordStored = true,
+                    snackbarMessage = "Sudo password stored"
+                )
+            } catch (e: SecurityGateRequiredException) {
+                _uiState.value = _uiState.value.copy(
+                    showSudoPasswordDialog = false,
+                    showSecurityGate = true,
+                    pendingAction = HostSecurityAction.SetSudoPassword,
+                    securityGateTitle = HostSecurityAction.SetSudoPassword.title,
+                    securityGateSubtitle = HostSecurityAction.SetSudoPassword.subtitle
+                )
+            } catch (e: Exception) {
+                Log.e("Rex", "Failed to store sudo password", e)
+                _uiState.value = _uiState.value.copy(
+                    showSudoPasswordDialog = false,
+                    snackbarMessage = "Failed to store sudo password: ${e.message}"
+                )
+            }
+        }
+    }
+
+    private fun performClearSudoPassword() {
+        viewModelScope.launch(GlobalCEH.handler) {
+            try {
+                hostsRepository.setSudoPasswordBlobId(hostId, null)
+                _uiState.value = _uiState.value.copy(
+                    sudoPasswordStored = false,
+                    snackbarMessage = "Sudo password cleared"
+                )
+            } catch (e: Exception) {
+                Log.e("Rex", "Failed to clear sudo password", e)
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = "Failed to clear sudo password: ${e.message}"
+                )
+            }
+        }
+    }
+
     private fun executeAction(action: HostSecurityAction) {
         viewModelScope.launch {
             try {
@@ -532,6 +596,9 @@ class HostDetailViewModel @Inject constructor(
                     HostSecurityAction.Deploy -> performShowPasswordDialog()
                     HostSecurityAction.Test -> performTestKey()
                     HostSecurityAction.Delete -> performDeleteKey()
+                    HostSecurityAction.SetSudoPassword ->
+                        _uiState.value = _uiState.value.copy(showSudoPasswordDialog = true)
+                    HostSecurityAction.ClearSudoPassword -> performClearSudoPassword()
                 }
 
             } catch (e: SecurityGateRequiredException) {

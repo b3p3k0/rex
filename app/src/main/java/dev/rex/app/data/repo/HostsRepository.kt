@@ -23,6 +23,7 @@ import androidx.room.Transaction
 import dev.rex.app.data.db.HostEntity
 import dev.rex.app.data.db.HostCommandsDao
 import dev.rex.app.data.db.HostsDao
+import dev.rex.app.data.db.KeyBlobsDao
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +35,7 @@ import javax.inject.Singleton
 class HostsRepository @Inject constructor(
     private val hostsDao: HostsDao,
     private val hostCommandsDao: HostCommandsDao,
+    private val keyBlobsDao: KeyBlobsDao,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     fun getAllHosts(): Flow<List<HostEntity>> = hostsDao.getAllHosts()
@@ -108,15 +110,35 @@ class HostsRepository @Inject constructor(
         true
     }
     
-    suspend fun deleteHost(host: HostEntity) = withContext(ioDispatcher) { 
-        hostsDao.deleteHost(host) 
+    /**
+     * Points the host at a new sudo password blob (or clears it with null),
+     * deleting the previously stored blob — sudo blobs are per-host and
+     * never shared, unlike SSH key blobs.
+     */
+    suspend fun setSudoPasswordBlobId(hostId: String, blobId: String?): Boolean = withContext(ioDispatcher) {
+        val host = hostsDao.getHostById(hostId) ?: return@withContext false
+        val oldBlobId = host.sudoPasswordBlobId
+        val updated = hostsDao.updateSudoPasswordBlobId(hostId, blobId, System.currentTimeMillis()) > 0
+        if (updated && oldBlobId != null && oldBlobId != blobId) {
+            keyBlobsDao.deleteKeyBlobById(oldBlobId)
+        }
+        updated
+    }
+
+    suspend fun deleteHost(host: HostEntity) = withContext(ioDispatcher) {
+        hostsDao.deleteHost(host)
     }
     
     @Transaction
     suspend fun deleteHostCascade(hostId: String): Boolean = withContext(ioDispatcher) {
+        // Sudo password blobs are per-host; remove with the host
+        val sudoBlobId = hostsDao.getHostById(hostId)?.sudoPasswordBlobId
         try {
             // FK CASCADE should handle mappings automatically
             val rowsAffected = hostsDao.deleteById(hostId)
+            if (rowsAffected > 0 && sudoBlobId != null) {
+                keyBlobsDao.deleteKeyBlobById(sudoBlobId)
+            }
             if (rowsAffected > 0) {
                 Log.i("Rex", "Deleted host $hostId via FK CASCADE")
                 true

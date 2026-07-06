@@ -27,8 +27,10 @@ import dev.rex.app.core.DangerousCommandValidator
 import dev.rex.app.core.Gatekeeper
 import dev.rex.app.core.SecurityGateRequiredException
 import dev.rex.app.core.SecurityManager
+import dev.rex.app.data.crypto.KeyBlobId
 import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.db.HostCommandMapping
+import dev.rex.app.data.db.HostEntity
 import dev.rex.app.data.repo.HostCommandRepository
 import dev.rex.app.data.repo.HostsRepository
 import dev.rex.app.data.settings.SettingsStore
@@ -86,7 +88,7 @@ class SessionViewModelTest {
         coEvery { mockSshClient.connect(any(), any(), any(), any()) } returns HostPin("ssh-ed25519", "SHA256:abc")
         coEvery { mockKeyVault.decryptPrivateKey(any()) } returns "key-bytes".toByteArray()
         coEvery { mockSshClient.authUsernameKey(any(), any()) } just Runs
-        every { mockSshClient.exec(any(), any()) } returns flowOf("hello\n".encodeUtf8())
+        every { mockSshClient.exec(any(), any(), any()) } returns flowOf("hello\n".encodeUtf8())
         coEvery { mockSshClient.waitExitCode(any()) } returns 0
         coEvery { mockSshClient.cancel() } just Runs
         every { mockSshClient.close() } just Runs
@@ -116,7 +118,8 @@ class SessionViewModelTest {
         authMethod: String = "key",
         keyBlobId: String? = "key-1",
         command: String = "uptime",
-        pinnedFingerprint: String? = "SHA256:abc"
+        pinnedFingerprint: String? = "SHA256:abc",
+        runWithSudo: Boolean = false
     ) = HostCommandMapping(
         id = "host-1",
         nickname = "Test Host",
@@ -139,8 +142,113 @@ class SessionViewModelTest {
         defaultTimeoutMs = 30000,
         allowPty = false,
         mappingId = testMappingId,
-        sortIndex = 0
+        sortIndex = 0,
+        runWithSudo = runWithSudo
     )
+
+    private fun hostEntity(sudoBlobId: String?) = HostEntity(
+        id = "host-1",
+        nickname = "Test Host",
+        hostname = "test.example.com",
+        port = 22,
+        username = "testuser",
+        authMethod = "key",
+        keyBlobId = "key-1",
+        connectTimeoutMs = 5000,
+        readTimeoutMs = 10000,
+        strictHostKey = true,
+        pinnedHostKeyFingerprint = "SHA256:abc",
+        keyProvisionedAt = 0L,
+        keyProvisionStatus = "success",
+        createdAt = 0L,
+        updatedAt = 0L,
+        sudoPasswordBlobId = sudoBlobId
+    )
+
+    @Test
+    fun `sudo command without stored password prompts for it`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(runWithSudo = true)
+        coEvery { mockHostsRepository.getHostById("host-1") } returns hostEntity(null)
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        val state = viewModel.uiState.value
+        assertNotNull("Sudo password prompt expected", state.sudoPasswordPrompt)
+        assertEquals("Test Host", state.sudoPasswordPrompt?.hostNickname)
+        assertEquals("testuser", state.sudoPasswordPrompt?.username)
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any(), any()) }
+    }
+
+    @Test
+    fun `sudo command with stored password runs with sudo prefix and stdin`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(runWithSudo = true)
+        coEvery { mockHostsRepository.getHostById("host-1") } returns hostEntity("blob-9")
+        coEvery { mockKeyVault.decryptSecret(KeyBlobId("blob-9")) } returns "hunter2".toByteArray()
+
+        var capturedCommand: String? = null
+        var capturedStdin: ByteArray? = null
+        every { mockSshClient.exec(any(), any(), any()) } answers {
+            capturedCommand = firstArg()
+            capturedStdin = thirdArg()
+            flowOf("root\n".encodeUtf8())
+        }
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        assertEquals("sudo -S -k -p '' uptime", capturedCommand)
+        assertEquals("hunter2\n", capturedStdin?.let { String(it, Charsets.UTF_8) })
+        assertNull(viewModel.uiState.value.sudoPasswordPrompt)
+        assertEquals(0, viewModel.uiState.value.exitCode)
+    }
+
+    @Test
+    fun `submitted sudo password is stored when remember is set and command runs`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(runWithSudo = true)
+        coEvery { mockHostsRepository.getHostById("host-1") } returns hostEntity(null)
+        coEvery { mockKeyVault.storeSecret(any()) } returns KeyBlobId("blob-new")
+        coEvery { mockHostsRepository.setSudoPasswordBlobId("host-1", "blob-new") } returns true
+
+        var capturedStdin: ByteArray? = null
+        every { mockSshClient.exec(any(), any(), any()) } answers {
+            capturedStdin = thirdArg()
+            flowOf("root\n".encodeUtf8())
+        }
+        val viewModel = createViewModel()
+        viewModel.startSession(testMappingId)
+        assertNotNull(viewModel.uiState.value.sudoPasswordPrompt)
+
+        viewModel.submitSudoPassword("hunter2", remember = true)
+
+        coVerify { mockKeyVault.storeSecret(any()) }
+        coVerify { mockHostsRepository.setSudoPasswordBlobId("host-1", "blob-new") }
+        assertEquals("hunter2\n", capturedStdin?.let { String(it, Charsets.UTF_8) })
+        assertNull(viewModel.uiState.value.sudoPasswordPrompt)
+    }
+
+    @Test
+    fun `sudo exit 1 with no output surfaces a password hint`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(runWithSudo = true)
+        coEvery { mockHostsRepository.getHostById("host-1") } returns hostEntity("blob-9")
+        coEvery { mockKeyVault.decryptSecret(KeyBlobId("blob-9")) } returns "wrong".toByteArray()
+        every { mockSshClient.exec(any(), any(), any()) } returns flowOf()
+        coEvery { mockSshClient.waitExitCode(any()) } returns 1
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.exitCode)
+        assertTrue(
+            "Expected sudo hint, got: ${state.error}",
+            state.error?.contains("sudo authentication failed") == true
+        )
+    }
 
     @Test
     fun `startSession executes command and emits final state`() = runTest {
@@ -164,7 +272,7 @@ class SessionViewModelTest {
     @Test
     fun `output is truncated to the line limit with an overflow marker`() = runTest {
         val lines = (1..130).joinToString("\n") { "line$it" } + "\n"
-        every { mockSshClient.exec(any(), any()) } returns flowOf(lines.encodeUtf8())
+        every { mockSshClient.exec(any(), any(), any()) } returns flowOf(lines.encodeUtf8())
         val viewModel = createViewModel()
 
         viewModel.startSession(testMappingId)
@@ -217,7 +325,7 @@ class SessionViewModelTest {
         assertNull("No dead-end error expected", state.error)
         assertEquals("Mapping kept for retry", testMappingId, state.activeMappingId)
         verify { mockSecurityManager.closeGate() }
-        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any(), any()) }
     }
 
     @Test
@@ -252,7 +360,7 @@ class SessionViewModelTest {
         assertFalse(state.showSecurityGate)
         assertNull("Cancel should not surface an error", state.error)
         assertNull("No pending mapping after cancel", state.activeMappingId)
-        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any(), any()) }
     }
 
     @Test
@@ -277,7 +385,7 @@ class SessionViewModelTest {
         viewModel.startSession(testMappingId)
 
         assertEquals("Password authentication is not yet supported", viewModel.uiState.value.error)
-        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any(), any()) }
     }
 
     @Test
@@ -306,12 +414,12 @@ class SessionViewModelTest {
             "Device authentication required. Please unlock your device.",
             viewModel.uiState.value.error
         )
-        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any(), any()) }
     }
 
     @Test
     fun `sensitive output is redacted before display`() = runTest {
-        every { mockSshClient.exec(any(), any()) } returns
+        every { mockSshClient.exec(any(), any(), any()) } returns
             flowOf("password=hunter2\n".encodeUtf8())
         val viewModel = createViewModel()
 
@@ -360,7 +468,7 @@ class SessionViewModelTest {
 
     @Test
     fun `exec failure surfaces an execution error`() = runTest {
-        every { mockSshClient.exec(any(), any()) } returns flow { throw RuntimeException("boom") }
+        every { mockSshClient.exec(any(), any(), any()) } returns flow { throw RuntimeException("boom") }
         val viewModel = createViewModel()
 
         viewModel.startSession(testMappingId)
@@ -388,7 +496,7 @@ class SessionViewModelTest {
         assertEquals("SHA256:xyz", state.tofuPrompt?.pin?.sha256)
         assertNull("A TOFU prompt is not an error", state.error)
         assertFalse(state.isRunning)
-        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any(), any()) }
         coVerify(exactly = 0) { mockHostsRepository.updateHostFingerprint(any(), any()) }
     }
 

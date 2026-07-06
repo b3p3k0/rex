@@ -38,6 +38,7 @@ data class EditCommandUiState(
     val requireConfirmation: Boolean = true,
     val defaultTimeoutMs: Int = 15000,
     val allowPty: Boolean = false,
+    val runWithSudo: Boolean = false,
     val nameError: String? = null,
     val commandError: String? = null,
     val isLoading: Boolean = false,
@@ -79,6 +80,7 @@ class EditCommandViewModel @Inject constructor(
                         requireConfirmation = command.requireConfirmation,
                         defaultTimeoutMs = command.defaultTimeoutMs,
                         allowPty = command.allowPty,
+                        runWithSudo = command.runWithSudo,
                         isLoadingInitial = false
                     )
                     Log.d("Rex", "Loaded command for editing: ${command.name}")
@@ -119,6 +121,10 @@ class EditCommandViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(allowPty = allowPty)
     }
 
+    fun onRunWithSudoChanged(runWithSudo: Boolean) {
+        _uiState.value = _uiState.value.copy(runWithSudo = runWithSudo)
+    }
+
     fun onSaveCommand(onSuccess: () -> Unit) {
         val currentState = _uiState.value
         if (!currentState.canSave) return
@@ -134,6 +140,7 @@ class EditCommandViewModel @Inject constructor(
                     requireConfirmation = currentState.requireConfirmation,
                     defaultTimeoutMs = currentState.defaultTimeoutMs,
                     allowPty = currentState.allowPty,
+                    runWithSudo = currentState.runWithSudo,
                     createdAt = System.currentTimeMillis(), // Will be ignored in update
                     updatedAt = System.currentTimeMillis()
                 )

@@ -145,6 +145,33 @@ class KeyVaultImpl @Inject constructor(
         return keyBlob.publicKeyOpenssh
     }
 
+    override suspend fun storeSecret(secret: ByteArray): KeyBlobId {
+        val keyBlobId = KeyBlobId(UUID.randomUUID().toString())
+        try {
+            val (encryptedBlob, wrappedDek) = encryptWithNewDek(secret)
+
+            val keyBlobEntity = KeyBlobEntity(
+                id = keyBlobId.id,
+                alg = "secret",
+                encBlob = encryptedBlob.ciphertext,
+                encBlobIv = encryptedBlob.iv,
+                encBlobTag = encryptedBlob.tag,
+                wrappedDekIv = wrappedDek.iv,
+                wrappedDekTag = wrappedDek.tag,
+                wrappedDekCiphertext = wrappedDek.ciphertext,
+                publicKeyOpenssh = "",
+                createdAt = System.currentTimeMillis()
+            )
+
+            keysRepository.insertKeyBlob(keyBlobEntity)
+            return keyBlobId
+        } finally {
+            secret.fill(0)
+        }
+    }
+
+    override suspend fun decryptSecret(id: KeyBlobId): ByteArray = decryptPrivateKey(id)
+
     override suspend fun validatePrivateKeyPem(pem: ByteArray): Boolean {
         return try {
             extractPublicKeyFromPem(pem)

@@ -166,6 +166,31 @@ fun EditCommandScreen(
                             )
                         }
 
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Run with sudo",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = "Runs as root; Rex enters the host's sudo password for you",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = uiState.runWithSudo,
+                                onCheckedChange = viewModel::onRunWithSudoChanged,
+                                modifier = Modifier.semantics {
+                                    contentDescription = "Run with sudo toggle"
+                                }
+                            )
+                        }
+
                         Column {
                             Text(
                                 text = "Timeout: ${uiState.defaultTimeoutMs / 1000}s",

@@ -47,6 +47,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dev.rex.app.data.db.HostCommandMapping
 import dev.rex.app.ui.components.HostCommandRow
 import dev.rex.app.ui.components.SecurityGate
+import dev.rex.app.ui.components.SudoPasswordDialog
 import dev.rex.app.ui.components.TofuConfirmationDialog
 import kotlinx.coroutines.launch
 
@@ -236,6 +237,18 @@ fun HostCommandsScreen(
             prompt = prompt,
             onTrust = { sessionViewModel.confirmTofuTrust() },
             onReject = { sessionViewModel.dismissTofuPrompt() }
+        )
+    }
+
+    sessionState.sudoPasswordPrompt?.let { prompt ->
+        SudoPasswordDialog(
+            hostNickname = prompt.hostNickname,
+            username = prompt.username,
+            commandName = prompt.commandName,
+            onDismiss = { sessionViewModel.dismissSudoPrompt() },
+            onConfirm = { password, remember ->
+                sessionViewModel.submitSudoPassword(password, remember)
+            }
         )
     }
 
