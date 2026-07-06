@@ -26,6 +26,7 @@ import androidx.lifecycle.SavedStateHandle
 import dev.rex.app.core.DangerousCommandValidator
 import dev.rex.app.core.Gatekeeper
 import dev.rex.app.core.SecurityGateRequiredException
+import dev.rex.app.core.SecurityManager
 import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.db.HostCommandMapping
 import dev.rex.app.data.repo.HostCommandRepository
@@ -61,6 +62,7 @@ class SessionViewModelTest {
     private val mockHostCommandRepository = mockk<HostCommandRepository>()
     private val mockKeyVault = mockk<KeyVault>()
     private val mockHostsRepository = mockk<HostsRepository>()
+    private val mockSecurityManager = mockk<SecurityManager>()
 
     private val testMappingId = "mapping-1"
 
@@ -89,6 +91,7 @@ class SessionViewModelTest {
         coEvery { mockSshClient.cancel() } just Runs
         every { mockSshClient.close() } just Runs
         every { mockSettingsStore.allowCopyOutput } returns flowOf(true)
+        every { mockSecurityManager.closeGate() } just Runs
     }
 
     @After
@@ -105,7 +108,8 @@ class SessionViewModelTest {
         mockDangerousCommandValidator,
         mockHostCommandRepository,
         mockKeyVault,
-        mockHostsRepository
+        mockHostsRepository,
+        mockSecurityManager
     )
 
     private fun createMapping(
@@ -183,7 +187,7 @@ class SessionViewModelTest {
     }
 
     @Test
-    fun `closed gate aborts the session with an error`() = runTest {
+    fun `closed gate prompts for authentication instead of erroring`() = runTest {
         every { mockDangerousCommandValidator.isDangerous("uptime") } returns true
         coEvery { mockGatekeeper.requireGateForDangerousCommand() } throws
             SecurityGateRequiredException("Auth required")
@@ -192,9 +196,63 @@ class SessionViewModelTest {
         viewModel.startSession(testMappingId)
 
         val state = viewModel.uiState.value
-        assertEquals("Session failed: Auth required", state.error)
+        assertTrue("Security gate should be requested", state.showSecurityGate)
+        assertNull("No dead-end error expected", state.error)
         assertFalse(state.isRunning)
+        assertEquals("Mapping kept for retry", testMappingId, state.activeMappingId)
+        verify { mockSecurityManager.closeGate() }
         coVerify(exactly = 0) { mockSshClient.connect(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `expired keystore auth during decrypt prompts for authentication`() = runTest {
+        coEvery { mockKeyVault.decryptPrivateKey(any()) } throws
+            SecurityGateRequiredException("Device authentication required to access encrypted keys")
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        val state = viewModel.uiState.value
+        assertTrue("Security gate should be requested", state.showSecurityGate)
+        assertNull("No dead-end error expected", state.error)
+        assertEquals("Mapping kept for retry", testMappingId, state.activeMappingId)
+        verify { mockSecurityManager.closeGate() }
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
+    }
+
+    @Test
+    fun `successful gate authentication retries the pending command`() = runTest {
+        coEvery { mockKeyVault.decryptPrivateKey(any()) } throws
+            SecurityGateRequiredException("Device authentication required to access encrypted keys")
+        val viewModel = createViewModel()
+        viewModel.startSession(testMappingId)
+        assertTrue(viewModel.uiState.value.showSecurityGate)
+
+        // Auth succeeded; keystore window refreshed, decryption now works
+        coEvery { mockKeyVault.decryptPrivateKey(any()) } returns "key-bytes".toByteArray()
+        viewModel.onSecurityGateAuthenticated()
+
+        val state = viewModel.uiState.value
+        assertFalse("Gate overlay dismissed", state.showSecurityGate)
+        assertEquals("Command should have run after retry", 0, state.exitCode)
+        assertNull(state.error)
+    }
+
+    @Test
+    fun `cancelling the gate returns to idle without an error`() = runTest {
+        coEvery { mockKeyVault.decryptPrivateKey(any()) } throws
+            SecurityGateRequiredException("Device authentication required to access encrypted keys")
+        val viewModel = createViewModel()
+        viewModel.startSession(testMappingId)
+        assertTrue(viewModel.uiState.value.showSecurityGate)
+
+        viewModel.onSecurityGateCancelled()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.showSecurityGate)
+        assertNull("Cancel should not surface an error", state.error)
+        assertNull("No pending mapping after cancel", state.activeMappingId)
+        coVerify(exactly = 0) { mockSshClient.exec(any(), any()) }
     }
 
     @Test

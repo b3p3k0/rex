@@ -30,6 +30,8 @@ import dev.rex.app.core.DangerousCommandValidator
 import dev.rex.app.core.Gatekeeper
 import dev.rex.app.core.GlobalCEH
 import dev.rex.app.core.Redactor
+import dev.rex.app.core.SecurityGateRequiredException
+import dev.rex.app.core.SecurityManager
 import dev.rex.app.data.crypto.KeyBlobId
 import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.repo.HostCommandRepository
@@ -57,7 +59,8 @@ data class SessionUiState(
     val commandName: String = "",
     val showOutputDialog: Boolean = false,
     val activeMappingId: String? = null,
-    val tofuPrompt: TofuPrompt? = null
+    val tofuPrompt: TofuPrompt? = null,
+    val showSecurityGate: Boolean = false
 )
 
 @HiltViewModel
@@ -70,7 +73,8 @@ class SessionViewModel @Inject constructor(
     private val dangerousCommandValidator: DangerousCommandValidator,
     private val hostCommandRepository: HostCommandRepository,
     private val keyVault: KeyVault,
-    private val hostsRepository: HostsRepository
+    private val hostsRepository: HostsRepository,
+    private val securityManager: SecurityManager
 ) : ViewModel() {
 
     companion object {
@@ -124,6 +128,32 @@ class SessionViewModel @Inject constructor(
         _uiState.value = newState
     }
 
+    private fun requestSecurityGate() {
+        // The app gate may still read as open while the hardware keystore
+        // auth window has expired underneath it; close it so SecurityGate
+        // shows the credential prompt instead of short-circuiting
+        securityManager.closeGate()
+        _uiState.value = _uiState.value.copy(
+            showSecurityGate = true,
+            isRunning = false
+        )
+    }
+
+    fun onSecurityGateAuthenticated() {
+        val mappingId = _uiState.value.activeMappingId
+        _uiState.value = _uiState.value.copy(showSecurityGate = false)
+        if (mappingId != null) {
+            startSession(mappingId)
+        }
+    }
+
+    fun onSecurityGateCancelled() {
+        _uiState.value = _uiState.value.copy(
+            showSecurityGate = false,
+            activeMappingId = null
+        )
+    }
+
     fun startSession(mappingId: String) {
         // Cancel any in-flight execution job to prevent double-tap races
         executionJob?.cancel()
@@ -159,7 +189,12 @@ class SessionViewModel @Inject constructor(
 
                 // Check if command is dangerous and require gate
                 if (dangerousCommandValidator.isDangerous(mapping.command)) {
-                    gatekeeper.requireGateForDangerousCommand()
+                    try {
+                        gatekeeper.requireGateForDangerousCommand()
+                    } catch (e: SecurityGateRequiredException) {
+                        requestSecurityGate()
+                        return@launch
+                    }
                 }
 
                 // Build expected host pin if we have a fingerprint
@@ -200,11 +235,8 @@ class SessionViewModel @Inject constructor(
                         android.util.Log.d("RexSsh", "About to decrypt private key with ID: ${mapping.keyBlobId}")
                         val keyBytes = try {
                             keyVault.decryptPrivateKey(KeyBlobId(mapping.keyBlobId))
-                        } catch (e: dev.rex.app.core.SecurityGateRequiredException) {
-                            _uiState.value = _uiState.value.copy(
-                                error = "Device authentication required. Please unlock your device and try again.",
-                                isRunning = false
-                            )
+                        } catch (e: SecurityGateRequiredException) {
+                            requestSecurityGate()
                             return@launch
                         } catch (e: Exception) {
                             android.util.Log.e("RexSsh", "Failed to decrypt private key: ${e.javaClass.simpleName}: ${e.message}", e)

@@ -35,6 +35,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -42,8 +43,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dagger.hilt.android.EntryPointAccessors
 import dev.rex.app.data.db.HostCommandMapping
 import dev.rex.app.ui.components.HostCommandRow
+import dev.rex.app.ui.components.SecurityGate
 import dev.rex.app.ui.components.TofuConfirmationDialog
 import kotlinx.coroutines.launch
 
@@ -71,6 +74,14 @@ fun HostCommandsScreen(
     val activity = checkNotNull(LocalActivity.current as? ComponentActivity)
     val sessionViewModel: SessionViewModel = hiltViewModel(activity)
     val sessionState by sessionViewModel.uiState.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    val securityManager = remember {
+        EntryPointAccessors.fromApplication(
+            context,
+            SecurityManagerEntryPoint::class.java
+        ).securityManager()
+    }
 
     fun startExecution(command: HostCommandMapping) {
         if (sessionState.isRunning && sessionState.activeMappingId != command.mappingId) {
@@ -225,6 +236,18 @@ fun HostCommandsScreen(
             prompt = prompt,
             onTrust = { sessionViewModel.confirmTofuTrust() },
             onReject = { sessionViewModel.dismissTofuPrompt() }
+        )
+    }
+
+    // Security gate overlay: shown when the keystore auth window has expired;
+    // on success the pending command is retried automatically
+    if (sessionState.showSecurityGate) {
+        SecurityGate(
+            title = "Authenticate to run command",
+            subtitle = "Your device credential is required to unlock SSH keys",
+            onAuthenticated = sessionViewModel::onSecurityGateAuthenticated,
+            onCancel = sessionViewModel::onSecurityGateCancelled,
+            securityManager = securityManager
         )
     }
 
