@@ -18,6 +18,8 @@
 
 package dev.rex.app.ui.navigation
 
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -27,9 +29,10 @@ import androidx.navigation.NavType
 import dev.rex.app.ui.screens.AddCommandScreen
 import dev.rex.app.ui.screens.AddHostScreen
 import dev.rex.app.ui.screens.EditCommandScreen
+import dev.rex.app.ui.screens.HostCommandsScreen
 import dev.rex.app.ui.screens.HostDetailScreen
+import dev.rex.app.ui.screens.HostListScreen
 import dev.rex.app.ui.screens.LogsScreen
-import dev.rex.app.ui.screens.MainTableScreen
 import dev.rex.app.ui.screens.SettingsScreen
 
 object RexDestinations {
@@ -37,6 +40,7 @@ object RexDestinations {
     const val HOST_ADD = "host_add"
     const val HOST_EDIT = "host_edit"
     const val HOST_DETAIL = "host_detail"
+    const val HOST_COMMANDS = "host_commands"
     const val ADD_COMMAND = "add-command"
     const val COMMAND_EDIT_EXISTING = "command_edit_existing"
     const val SETTINGS = "settings"
@@ -52,15 +56,12 @@ fun RexNavigation(
         startDestination = RexDestinations.MAIN_TABLE
     ) {
         composable(RexDestinations.MAIN_TABLE) {
-            MainTableScreen(
+            HostListScreen(
                 onNavigateToAddHost = {
                     navController.navigate(RexDestinations.HOST_ADD)
                 },
-                onNavigateToAddCommand = { hostId ->
-                    navController.navigate("${RexDestinations.ADD_COMMAND}/$hostId")
-                },
-                onNavigateToEditCommand = { commandId ->
-                    navController.navigate("${RexDestinations.COMMAND_EDIT_EXISTING}/$commandId")
+                onNavigateToHostCommands = { hostId ->
+                    navController.navigate("${RexDestinations.HOST_COMMANDS}/$hostId")
                 },
                 onNavigateToSettings = {
                     navController.navigate(RexDestinations.SETTINGS)
@@ -71,6 +72,28 @@ fun RexNavigation(
                 onNavigateToHostDetail = { hostId ->
                     navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId")
                 },
+            )
+        }
+
+        composable(
+            "${RexDestinations.HOST_COMMANDS}/{hostId}",
+            arguments = listOf(navArgument("hostId") { type = NavType.StringType }),
+            enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+            popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+        ) {
+            HostCommandsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToAddCommand = { hostId ->
+                    navController.navigate("${RexDestinations.ADD_COMMAND}/$hostId")
+                },
+                onNavigateToEditCommand = { commandId ->
+                    navController.navigate("${RexDestinations.COMMAND_EDIT_EXISTING}/$commandId")
+                },
+                onNavigateToHostDetail = { hostId ->
+                    navController.navigate("${RexDestinations.HOST_DETAIL}/$hostId")
+                }
             )
         }
 

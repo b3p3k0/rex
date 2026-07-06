@@ -33,6 +33,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.rex.app.data.db.HostCommandMapping
 
@@ -79,7 +81,7 @@ fun HostCommandRow(
             )
             .semantics {
                 role = Role.Button
-                contentDescription = "Host command: ${hostCommand.nickname} ${hostCommand.name}. Tap to execute, long press for options."
+                contentDescription = "Command: ${hostCommand.name}. Tap to execute, long press for options."
             }
     ) {
         Column(
@@ -93,7 +95,7 @@ fun HostCommandRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${hostCommand.nickname} • ${hostCommand.name}",
+                    text = hostCommand.name,
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(1f)
                 )
@@ -115,8 +117,11 @@ fun HostCommandRow(
             }
 
             Text(
-                text = hostCommand.hostname,
+                text = hostCommand.command,
                 style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
