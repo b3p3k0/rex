@@ -16,7 +16,7 @@ Android app to store hosts and commands, run them over SSH, and stream output. S
 ## Build Requirements
 
 - **JDK 21** - Required for Android development
-- **Android SDK** - API 35 with build-tools 35.0.0
+- **Android SDK** - platform 37 (compileSdk); Gradle installs it on demand
 - **Android Studio** - Latest version recommended
 
 ### Quick Setup (Ubuntu/Debian)
@@ -37,7 +37,7 @@ export PATH="$HOME/Android/cmdline-tools/latest/bin:$HOME/Android/platform-tools
 
 # Accept licenses and install components
 yes | sdkmanager --licenses
-sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+sdkmanager "platform-tools" "platforms;android-37"
 ```
 
 ## Build & Install
@@ -53,11 +53,11 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Architecture
 
 - **Package**: `dev.rex.app` 
-- **Target**: API 26-35 (Android 8.0+)
+- **Target**: minSdk 26, targetSdk 35, compileSdk 37 (Android 8.0+)
 - **Language**: Kotlin with Jetpack Compose
 - **Database**: Room with schema version 4
 - **Dependency Injection**: Hilt
-- **SSH Library**: SSHJ 0.38.0
+- **SSH Library**: SSHJ 0.40.0
 
 ### Key Components
 

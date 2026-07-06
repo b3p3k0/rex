@@ -40,13 +40,30 @@ mapping.txt proves classes survived, not that negotiation works.
   `keyProvisionStatus = "pending"`, so `getHostById` must return the updated
   host after it is called (ViewModels reload after mutations).
 
-## Toolchain pins & pairings
+## Toolchain pins & pairings (state after the 2026-07 migration)
 
-- Kotlin and KSP versions move in lockstep (`<kotlin>-<ksp>` artifact naming).
-- Room < 2.7 does not support KSP2; Room and Kotlin 2.4 must be bumped
-  together.
-- Room gradle plugin and room-compiler share one version; single-source them
-  in the version catalog.
+Current stack: Gradle 9.4.1, AGP 9.2.0 (built-in Kotlin), Kotlin 2.4.0,
+KSP 2.3.9, Hilt 2.60, Room 2.8.4, Compose BOM 2026.06.01, SSHJ 0.40.0,
+BouncyCastle 1.84, compileSdk 37 / targetSdk 35 / minSdk 26, Java 21.
+
+Hard-won pairings:
+- **Hilt ≥2.59 requires AGP ≥9.0, and Hilt ≤2.58 cannot read Kotlin 2.4
+  metadata.** Kotlin 2.4 + Hilt 2.60 + AGP 9 must move together; the last
+  pre-AGP-9 combination is Kotlin 2.3.x + Hilt 2.58.
+- **AGP 9 rejects the `org.jetbrains.kotlin.android` plugin** (built-in
+  Kotlin). The Kotlin version is pinned via the Compose Compiler plugin
+  (`org.jetbrains.kotlin.plugin.compose`) in the catalog; the
+  `kotlin { compilerOptions {} }` block still works.
+- KSP versions are decoupled from Kotlin since the 2.x line (e.g. KSP 2.3.9
+  works with Kotlin 2.4.0). Room < 2.7 has no KSP2 support.
+- Verify a Kotlin version is actually published (marker pom on Maven
+  Central) before pinning — maven-metadata.xml lists versions whose
+  artifacts 404 (2.4.10/2.4.20 at migration time).
+- Room gradle plugin and room-compiler share one catalog version key.
+- The `uk.uuid.slf4j:slf4j-android` provider (needed since SSHJ 0.40 uses
+  slf4j-api 2.x) must stay excluded from unit-test classpaths — its
+  ServiceLoader init calls real `android.util.Log` and kills mockk on the
+  JVM (see the `configurations.configureEach` block in app/build.gradle.kts).
 - This machine: system Java is too new for the wrapper; build with
   `JAVA_HOME=/opt/android-studio/jbr` (JBR 21) and `ANDROID_HOME=~/Android/Sdk`.
 
