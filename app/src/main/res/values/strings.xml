@@ -26,14 +26,11 @@
 
     <!-- About dialog -->
     <string name="about_title">About Rex</string>
-    <string name="about_line1">Hi. I\'m Rex — a tiny, tidy SSH runner vibe-coded by ChatGPT5, Claude Sonnet 4 (AIs), and Kev (HI).</string>
-    <string name="about_line2">"Yes, it\'s AI-made." Some call that "slop." We call that the future. We polished this turd into something useful.</string>
-    <string name="about_repo_prefix">Repo · GitHub: </string>
-    <string name="about_chat_prefix">Chat · r/vibecoding: </string>
+    <string name="about_line1">Rex stores your SSH hosts and commands and runs them on your servers, streaming the output back to your phone.</string>
+    <string name="about_line2">Private keys are generated on this device, encrypted by the Android Keystore, and never leave it.</string>
+    <string name="about_repo_prefix">"Source code: "</string>
     <string name="about_github_label">github.com/b3p3k0/rex</string>
     <string name="about_github_url">https://github.com/b3p3k0/rex</string>
-    <string name="about_reddit_label">reddit.com/r/vibecoding</string>
-    <string name="about_reddit_url">https://www.reddit.com/r/vibecoding</string>
     <string name="about_license">GPL-3.0.</string>
     <string name="about_version_fmt">Version: %1$s</string>
     <string name="about_close">Close</string>

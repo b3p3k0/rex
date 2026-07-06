@@ -40,7 +40,6 @@ import dev.rex.app.R
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     val githubUrl = stringResource(R.string.about_github_url)
-    val redditUrl = stringResource(R.string.about_reddit_url)
 
     val linkStyle = SpanStyle(
         color = MaterialTheme.colorScheme.primary,
@@ -57,12 +56,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
         append(stringResource(R.string.about_repo_prefix))
         withLink(LinkAnnotation.Url(githubUrl, TextLinkStyles(style = linkStyle))) {
             append(stringResource(R.string.about_github_label))
-        }
-
-        append("\n")
-        append(stringResource(R.string.about_chat_prefix))
-        withLink(LinkAnnotation.Url(redditUrl, TextLinkStyles(style = linkStyle))) {
-            append(stringResource(R.string.about_reddit_label))
         }
     }
 
