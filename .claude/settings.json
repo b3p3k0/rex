@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(adb devices)",
+      "Bash(adb devices *)",
+      "Bash(adb logcat *)",
+      "Bash(adb shell pidof *)",
+      "Bash(adb -s emulator-5554 logcat *)",
+      "Bash(adb -s emulator-5554 shell pidof *)",
+      "Bash(curl -s https://repo1.maven.org/*)",
+      "Bash(curl -s https://dl.google.com/android/maven2/*)",
+      "Bash(keytool -list *)",
+      "Bash(apksigner verify *)"
+    ]
+  }
+}
