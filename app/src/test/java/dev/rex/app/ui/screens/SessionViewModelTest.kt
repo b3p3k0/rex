@@ -31,8 +31,10 @@ import dev.rex.app.data.crypto.KeyBlobId
 import dev.rex.app.data.crypto.KeyVault
 import dev.rex.app.data.db.HostCommandMapping
 import dev.rex.app.data.db.HostEntity
+import dev.rex.app.data.db.LogEntity
 import dev.rex.app.data.repo.HostCommandRepository
 import dev.rex.app.data.repo.HostsRepository
+import dev.rex.app.data.repo.LogsRepository
 import dev.rex.app.data.settings.SettingsStore
 import dev.rex.app.data.ssh.HostPin
 import dev.rex.app.data.ssh.SshClient
@@ -65,6 +67,7 @@ class SessionViewModelTest {
     private val mockKeyVault = mockk<KeyVault>()
     private val mockHostsRepository = mockk<HostsRepository>()
     private val mockSecurityManager = mockk<SecurityManager>()
+    private val mockLogsRepository = mockk<LogsRepository>()
 
     private val testMappingId = "mapping-1"
 
@@ -94,6 +97,7 @@ class SessionViewModelTest {
         every { mockSshClient.close() } just Runs
         every { mockSettingsStore.allowCopyOutput } returns flowOf(true)
         every { mockSecurityManager.closeGate() } just Runs
+        coEvery { mockLogsRepository.insertLog(any()) } just Runs
     }
 
     @After
@@ -111,7 +115,8 @@ class SessionViewModelTest {
         mockHostCommandRepository,
         mockKeyVault,
         mockHostsRepository,
-        mockSecurityManager
+        mockSecurityManager,
+        mockLogsRepository
     )
 
     private fun createMapping(
@@ -558,5 +563,62 @@ class SessionViewModelTest {
         assertFalse(state.isRunning)
         assertNull("Active mapping should be cleared", state.activeMappingId)
         coVerify { mockSshClient.cancel() }
+    }
+
+    @Test
+    fun `successful run records a metadata-only execution log`() = runTest {
+        val logged = slot<LogEntity>()
+        coEvery { mockLogsRepository.insertLog(capture(logged)) } just Runs
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        coVerify(exactly = 1) { mockLogsRepository.insertLog(any()) }
+        val entry = logged.captured
+        assertEquals("Test Host", entry.hostNickname)
+        assertEquals("Uptime", entry.commandName)
+        assertEquals(0, entry.exitCode)
+        assertEquals("success", entry.status)
+        assertTrue("Byte count should reflect streamed output", entry.bytesStdout > 0)
+        assertNull("No command output stored on success", entry.messageRedacted)
+    }
+
+    @Test
+    fun `exec failure records a failure log with a redacted message`() = runTest {
+        every { mockSshClient.exec(any(), any(), any()) } returns flow { throw RuntimeException("boom") }
+        val logged = slot<LogEntity>()
+        coEvery { mockLogsRepository.insertLog(capture(logged)) } just Runs
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        coVerify(exactly = 1) { mockLogsRepository.insertLog(any()) }
+        val entry = logged.captured
+        assertEquals("failure", entry.status)
+        assertNull("No exit code on exec failure", entry.exitCode)
+        assertNotNull("Failure should carry a status message", entry.messageRedacted)
+    }
+
+    @Test
+    fun `missing mapping does not record a log`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns null
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        coVerify(exactly = 0) { mockLogsRepository.insertLog(any()) }
+    }
+
+    @Test
+    fun `TOFU prompt does not record a log`() = runTest {
+        coEvery { mockHostCommandRepository.getHostCommandMapping(testMappingId) } returns
+            createMapping(pinnedFingerprint = null)
+        coEvery { mockSshClient.connect(any(), any(), any(), null) } throws
+            TofuRequiredException(HostPin("ssh-ed25519", "SHA256:xyz"), "First connection")
+        val viewModel = createViewModel()
+
+        viewModel.startSession(testMappingId)
+
+        coVerify(exactly = 0) { mockLogsRepository.insertLog(any()) }
     }
 }

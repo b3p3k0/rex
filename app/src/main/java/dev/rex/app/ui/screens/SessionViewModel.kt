@@ -34,8 +34,10 @@ import dev.rex.app.core.SecurityGateRequiredException
 import dev.rex.app.core.SecurityManager
 import dev.rex.app.data.crypto.KeyBlobId
 import dev.rex.app.data.crypto.KeyVault
+import dev.rex.app.data.db.LogEntity
 import dev.rex.app.data.repo.HostCommandRepository
 import dev.rex.app.data.repo.HostsRepository
+import dev.rex.app.data.repo.LogsRepository
 import dev.rex.app.data.settings.SettingsStore
 import dev.rex.app.data.ssh.HostPin
 import dev.rex.app.data.ssh.SshClient
@@ -46,6 +48,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import okio.ByteString.Companion.toByteString
+import java.util.UUID
 import javax.inject.Inject
 
 data class SudoPasswordPrompt(
@@ -81,7 +84,8 @@ class SessionViewModel @Inject constructor(
     private val hostCommandRepository: HostCommandRepository,
     private val keyVault: KeyVault,
     private val hostsRepository: HostsRepository,
-    private val securityManager: SecurityManager
+    private val securityManager: SecurityManager,
+    private val logsRepository: LogsRepository
 ) : ViewModel() {
 
     companion object {
@@ -95,6 +99,10 @@ class SessionViewModel @Inject constructor(
     private var timerJob: Job? = null
     private var clipboardClearJob: Job? = null
     private val rawOutput = StringBuilder()
+
+    // Execution-log metrics for the current run
+    private var streamedBytes = 0L
+    private var executionStartMs = 0L
 
     // Held only between the sudo password dialog and the retried session
     private var pendingSudoPassword: String? = null
@@ -137,6 +145,38 @@ class SessionViewModel @Inject constructor(
             "emitFinalState: exitCode=$exitCode, outputChars=${displayOutput.length}, canCopy=${newState.canCopy}"
         )
         _uiState.value = newState
+    }
+
+    // SECURITY: metadata-only execution log; command output is never stored.
+    // messageRedacted holds only sanitized error/status text.
+    private suspend fun recordExecutionLog(
+        exitCode: Int?,
+        bytesStdout: Long,
+        durationMs: Long,
+        errorMessage: String?
+    ) {
+        val state = _uiState.value
+        if (state.commandName.isBlank()) return
+        val ts = System.currentTimeMillis()
+        try {
+            logsRepository.insertLog(
+                LogEntity(
+                    id = UUID.randomUUID().toString(),
+                    ts = ts,
+                    hostNickname = state.hostNickname,
+                    commandName = state.commandName,
+                    exitCode = exitCode,
+                    durationMs = durationMs.toInt(),
+                    bytesStdout = bytesStdout.toInt(),
+                    bytesStderr = 0,
+                    status = if (exitCode == 0) "success" else "failure",
+                    messageRedacted = errorMessage?.let { Redactor.redact(it) },
+                    idxSeq = ts
+                )
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("RexSsh", "Failed to record execution log: ${e.message}", e)
+        }
     }
 
     private fun requestSecurityGate() {
@@ -188,6 +228,7 @@ class SessionViewModel @Inject constructor(
         // Cancel any in-flight execution job to prevent double-tap races
         executionJob?.cancel()
 
+        val sessionStartMs = System.currentTimeMillis()
         viewModelScope.launch(GlobalCEH.handler) {
             try {
                 // Fetch the mapping
@@ -390,11 +431,18 @@ class SessionViewModel @Inject constructor(
             } catch (e: Exception) {
                 val allowCopy = settingsStore.allowCopyOutput.first()
                 val displayOutput = Redactor.redact(buildDisplayOutput())
+                val errorMessage = "Session failed: ${e.message}"
                 emitFinalState(
                     displayOutput = displayOutput,
                     exitCode = null,
                     allowCopy = allowCopy,
-                    errorMessage = "Session failed: ${e.message}"
+                    errorMessage = errorMessage
+                )
+                recordExecutionLog(
+                    exitCode = null,
+                    bytesStdout = 0L,
+                    durationMs = System.currentTimeMillis() - sessionStartMs,
+                    errorMessage = errorMessage
                 )
                 rawOutput.clear()
             } finally {
@@ -423,12 +471,15 @@ class SessionViewModel @Inject constructor(
         )
 
         rawOutput.clear()
+        streamedBytes = 0L
+        executionStartMs = System.currentTimeMillis()
         startTimer()
 
         executionJob = viewModelScope.launch(GlobalCEH.handler) {
             try {
                 // Stream command output
                 sshClient.exec(command, pty, stdin).collect { byteString ->
+                    streamedBytes += byteString.size
                     val text = byteString.utf8()
                     rawOutput.append(text)
                 }
@@ -457,6 +508,12 @@ class SessionViewModel @Inject constructor(
                     allowCopy = allowCopy,
                     errorMessage = sudoHint
                 )
+                recordExecutionLog(
+                    exitCode = exitCode,
+                    bytesStdout = streamedBytes,
+                    durationMs = System.currentTimeMillis() - executionStartMs,
+                    errorMessage = sudoHint
+                )
                 rawOutput.clear()
 
             } catch (e: Exception) {
@@ -476,11 +533,18 @@ class SessionViewModel @Inject constructor(
                     false
                 }
 
+                val errorMessage = "Execution failed: ${e.message}"
                 emitFinalState(
                     displayOutput = displayOutput,
                     exitCode = null,
                     allowCopy = allowCopy,
-                    errorMessage = "Execution failed: ${e.message}"
+                    errorMessage = errorMessage
+                )
+                recordExecutionLog(
+                    exitCode = null,
+                    bytesStdout = streamedBytes,
+                    durationMs = System.currentTimeMillis() - executionStartMs,
+                    errorMessage = errorMessage
                 )
                 rawOutput.clear()
             }
